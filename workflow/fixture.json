@@ -1,0 +1,38 @@
+{
+  "goal": {
+    "name": "完成双力臂"
+  },
+  "milestones": [
+    {"name": "完成 1 个引体向上", "target_desc": "标准正手引体向上 1 次", "target_value": 1},
+    {"name": "完成 10 个标准引体", "target_desc": "标准引体向上 10 次", "target_value": 10},
+    {"name": "完成 10 个变体引体", "target_desc": "宽距/窄距/反手等变体", "target_value": 10},
+    {"name": "完成 1 个双力臂", "target_desc": "标准双力臂 1 次", "target_value": 1}
+  ],
+  "action_plans": {
+    "milestone_index": 0,
+    "items": [
+      "负重悬吊 30秒",
+      "弹力带辅助引体 5×3",
+      "离心引体下降 5×3",
+      "拉伸 30秒",
+      "平板支撑 60秒",
+      "死虫式 3×10"
+    ]
+  },
+  "habits": [
+    {
+      "milestone_index": 0,
+      "name": "练背计划",
+      "frequency": "every_other",
+      "two_min_ver": "挂上单杠 30秒",
+      "action_plan_indices": [0, 1, 2, 3]
+    },
+    {
+      "milestone_index": 0,
+      "name": "核心训练",
+      "frequency": "twice_week",
+      "two_min_ver": "平板支撑 20秒",
+      "action_plan_indices": [4, 5]
+    }
+  ]
+}
