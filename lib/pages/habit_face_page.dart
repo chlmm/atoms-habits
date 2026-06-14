@@ -389,7 +389,16 @@ class _HabitFacePageState extends State<HabitFacePage> {
 
     return Opacity(
       opacity: greyedOut ? 0.5 : 1.0,
-      child: Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () async {
+          final result = await Navigator.pushNamed(
+            context, '/habit-detail',
+            arguments: habit.id,
+          );
+          if (result == true) _loadData();
+        },
+        child: Card(
         elevation: 0,
         margin: const EdgeInsets.only(bottom: 8),
         shape: RoundedRectangleBorder(
@@ -565,7 +574,7 @@ class _HabitFacePageState extends State<HabitFacePage> {
                       child: const Text('升级为完整版'),
                     ),
                   ]
-                  // Full done
+                  // Full done — allow revert
                   else if (isCompleted) ...[
                     Chip(
                       avatar: const Icon(Icons.check_circle, size: 16,
@@ -577,8 +586,14 @@ class _HabitFacePageState extends State<HabitFacePage> {
                       side: BorderSide.none,
                       visualDensity: VisualDensity.compact,
                     ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () => _skipHabit(habit.id!),
+                      child: const Text('改为跳过',
+                          style: TextStyle(color: Colors.grey)),
+                    ),
                   ]
-                  // Skipped
+                  // Skipped — allow revert / upgrade
                   else if (isSkipped) ...[
                     Chip(
                       avatar: const Icon(Icons.skip_next, size: 16,
@@ -590,12 +605,24 @@ class _HabitFacePageState extends State<HabitFacePage> {
                       side: BorderSide.none,
                       visualDensity: VisualDensity.compact,
                     ),
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      onPressed: () => _completeFull(habit.id!),
+                      icon: const Icon(Icons.check, size: 14),
+                      label: const Text('完成'),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        minimumSize: const Size(0, 32),
+                        textStyle: const TextStyle(fontSize: 13),
+                      ),
+                    ),
                   ],
                 ],
               ),
             ],
           ),
         ),
+      ),
       ),
     );
   }

@@ -76,6 +76,30 @@ class FrequencyService {
     }
   }
 
+  /// 判断指定日期是否为训练日。
+  /// 用于在详情页展示未来/过去的训练日安排。
+  bool isTrainingDayForDate(Habit habit, List<LogEntry> logs, DateTime date) {
+    final dateStr = _dateKey(date);
+    final freq = habit.frequencyEnum;
+
+    switch (freq) {
+      case HabitFrequency.daily:
+        return true;
+
+      case HabitFrequency.everyOther:
+        return _isTrainingDayEveryOtherForDate(logs, dateStr);
+
+      case HabitFrequency.weekly:
+        return _isTrainingDayWeeklyForDate(logs, date, target: 1);
+
+      case HabitFrequency.twiceWeek:
+        return _isTrainingDayWeeklyForDate(logs, date, target: 2);
+
+      case HabitFrequency.custom:
+        return true;
+    }
+  }
+
   // ── Private helpers ───────────────────────────────────
 
   bool _isTrainingDayEveryOther(List<LogEntry> logs, String today) {
@@ -91,6 +115,26 @@ class FrequencyService {
 
     // Training day if no execution yesterday
     return recentLogs.first.date != yesterday;
+  }
+
+  /// 判断指定日期是否为 every_other 的训练日。
+  /// 逻辑：该日往前看，最近一个非 skip 的打卡日是否为前天（隔一天）。
+  bool _isTrainingDayEveryOtherForDate(List<LogEntry> logs, String dateStr) {
+    // 不计 skip，按日期降序
+    final relevantLogs = logs
+        .where((l) => l.date.compareTo(dateStr) < 0 && l.status != LogStatus.skipped)
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+
+    if (relevantLogs.isEmpty) return true; // 从未执行过 → 视为训练日
+
+    final lastDone = relevantLogs.first.date;
+    final lastDoneDate = DateTime.parse(lastDone);
+    final targetDate = DateTime.parse(dateStr);
+    final diff = targetDate.difference(lastDoneDate).inDays;
+
+    // 隔天规则：距离上次完成偶数天 → 训练日
+    return diff % 2 == 1;
   }
 
   bool _isTrainingDayWeekly(List<LogEntry> logs, DateTime now,
@@ -111,6 +155,26 @@ class FrequencyService {
     }
 
     return thisWeekCompleted < target;
+  }
+
+  /// 判断指定日期所在周是否还需要训练（weekly / twice_week）。
+  bool _isTrainingDayWeeklyForDate(List<LogEntry> logs, DateTime date,
+      {int target = 1}) {
+    final weekday = date.weekday;
+    final monday = date.subtract(Duration(days: weekday - 1));
+    final weekStart = _dateKey(monday);
+    final dateStr = _dateKey(date);
+
+    // 统计该周在指定日期之前（不含当天）的完成次数
+    int weekCompleted = 0;
+    for (final l in logs) {
+      if (l.status == LogStatus.skipped) continue;
+      if (l.date.compareTo(weekStart) >= 0 && l.date.compareTo(dateStr) < 0) {
+        weekCompleted++;
+      }
+    }
+
+    return weekCompleted < target;
   }
 
   // ── Consecutive miss detection ────────────────────────
