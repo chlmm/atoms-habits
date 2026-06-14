@@ -72,7 +72,7 @@ class AtomsApp extends StatelessWidget {
               builder: (_) => HabitCreatePage(
                 goalService: goalService,
                 habitService: habitService,
-                milestoneId: settings.arguments as int?,
+                contextGoalId: settings.arguments as int?,
               ),
             );
           case '/edit-habit':

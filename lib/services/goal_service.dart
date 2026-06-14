@@ -1,7 +1,6 @@
 import '../db/database.dart';
 import '../models/goal.dart';
 import '../models/milestone.dart';
-import '../models/action_plan.dart';
 
 class GoalService {
   final AppDatabase _db;
@@ -103,27 +102,6 @@ class GoalService {
       await completeGoal(m.goalId);
     }
   }
-
-  // ── Action Plans ─────────────────────────────────────
-
-  Future<ActionPlan> createActionPlan(
-    int milestoneId,
-    String name, {
-    int sortOrder = 0,
-  }) async {
-    final ap = ActionPlan(
-      milestoneId: milestoneId,
-      name: name,
-      sortOrder: sortOrder,
-    );
-    final id = await _db.insertActionPlan(ap);
-    return ap.copyWith(id: id);
-  }
-
-  Future<List<ActionPlan>> getActionPlansByMilestone(int milestoneId) =>
-      _db.getActionPlansByMilestone(milestoneId);
-
-  Future<void> deleteActionPlan(int id) => _db.deleteActionPlan(id);
 
   // ── Combined Queries ─────────────────────────────────
 

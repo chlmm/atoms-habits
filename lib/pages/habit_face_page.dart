@@ -392,11 +392,11 @@ class _HabitFacePageState extends State<HabitFacePage> {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () async {
-          final result = await Navigator.pushNamed(
+          await Navigator.pushNamed(
             context, '/habit-detail',
             arguments: habit.id,
           );
-          if (result == true) _loadData();
+          _loadData();
         },
         child: Card(
         elevation: 0,

@@ -17,7 +17,7 @@ class HabitService {
     int milestoneId,
     String name,
     String frequency, {
-    List<int>? actionPlanIds,
+    List<String>? actionNames,
     String? twoMinVer,
     String? frequencyDesc,
   }) async {
@@ -31,9 +31,9 @@ class HabitService {
     final id = await _db.insertHabit(habit);
     final created = habit.copyWith(id: id);
 
-    if (actionPlanIds != null && actionPlanIds.isNotEmpty) {
-      for (var i = 0; i < actionPlanIds.length; i++) {
-        await _db.insertHabitAction(id, actionPlanIds[i], sortOrder: i);
+    if (actionNames != null && actionNames.isNotEmpty) {
+      for (var i = 0; i < actionNames.length; i++) {
+        await createActionPlan(id, actionNames[i], sortOrder: i);
       }
     }
 
@@ -55,24 +55,29 @@ class HabitService {
 
   Future<void> archiveHabit(int id) => _db.archiveHabit(id);
 
-  // ── Habit Actions ────────────────────────────────────
+  // ── Action Plans (habit-level) ────────────────────────
+
+  Future<ActionPlan> createActionPlan(
+    int habitId,
+    String name, {
+    int sortOrder = 0,
+  }) async {
+    final ap = ActionPlan(
+      habitId: habitId,
+      name: name,
+      sortOrder: sortOrder,
+    );
+    final id = await _db.insertActionPlan(ap);
+    return ap.copyWith(id: id);
+  }
 
   Future<List<ActionPlan>> getActionPlansForHabit(int habitId) =>
       _db.getActionPlansForHabit(habitId);
 
-  Future<void> setActionPlansForHabit(
-      int habitId, List<int> actionPlanIds) async {
-    await _db.deleteHabitActionsForHabit(habitId);
-    for (var i = 0; i < actionPlanIds.length; i++) {
-      await _db.insertHabitAction(habitId, actionPlanIds[i], sortOrder: i);
-    }
-  }
+  Future<void> deleteActionPlan(int id) => _db.deleteActionPlan(id);
 
-  Future<void> addActionPlanToHabit(int habitId, int actionPlanId) async {
-    final existing = await _db.getActionPlansForHabit(habitId);
-    await _db.insertHabitAction(habitId, actionPlanId,
-        sortOrder: existing.length);
-  }
+  Future<void> deleteActionPlansForHabit(int habitId) =>
+      _db.deleteActionPlansForHabit(habitId);
 
   // ── Logging ──────────────────────────────────────────
 

@@ -235,9 +235,9 @@ class CliService {
 
   Future<Map<String, dynamic>> _handleCreateActionPlan(
       Map<String, dynamic> p) async {
-    final milestoneId = p['milestone_id'] as int;
+    final habitId = p['habit_id'] as int;
     final name = p['name'] as String;
-    final ap = await _goalService.createActionPlan(milestoneId, name);
+    final ap = await _habitService.createActionPlan(habitId, name);
     return ap.toMap();
   }
 
@@ -246,13 +246,13 @@ class CliService {
     final milestoneId = p['milestone_id'] as int;
     final name = p['name'] as String;
     final frequency = p['frequency'] as String? ?? 'daily';
-    final actionPlanIds = (p['action_plan_ids'] as List<dynamic>?)
-        ?.map((e) => e as int)
+    final actionNames = (p['action_names'] as List<dynamic>?)
+        ?.map((e) => e as String)
         .toList();
     final twoMinVer = p['two_min_ver'] as String?;
     final h = await _habitService.createHabit(
       milestoneId, name, frequency,
-      actionPlanIds: actionPlanIds,
+      actionNames: actionNames,
       twoMinVer: twoMinVer,
     );
     return h.toMap();
@@ -272,8 +272,8 @@ class CliService {
 
   Future<List<Map<String, dynamic>>> _handleGetActionPlans(
       Map<String, dynamic> p) async {
-    final milestoneId = p['milestone_id'] as int;
-    final aps = await _goalService.getActionPlansByMilestone(milestoneId);
+    final habitId = p['habit_id'] as int;
+    final aps = await _habitService.getActionPlansForHabit(habitId);
     return aps.map((a) => a.toMap()).toList();
   }
 

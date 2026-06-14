@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
 import '../services/goal_service.dart';
 import '../services/habit_service.dart';
-import '../models/action_plan.dart';
 
 class HabitCreatePage extends StatefulWidget {
   final GoalService goalService;
   final HabitService habitService;
-  final int? milestoneId;
+  final int? contextGoalId;
 
   const HabitCreatePage({
     super.key,
     required this.goalService,
     required this.habitService,
-    this.milestoneId,
+    this.contextGoalId,
   });
 
   @override
@@ -24,10 +23,11 @@ class _HabitCreatePageState extends State<HabitCreatePage> {
   final _twoMinVerController = TextEditingController();
   final _customFreqController = TextEditingController();
   String _frequency = 'daily';
-  List<ActionPlan> _availableActions = [];
-  Set<int> _selectedActionIds = {};
+  List<String> _actionNames = [];
   bool _loading = true;
   bool _saving = false;
+
+  int? _milestoneId;
 
   static const _frequencies = [
     ('daily', '每天'),
@@ -40,7 +40,7 @@ class _HabitCreatePageState extends State<HabitCreatePage> {
   @override
   void initState() {
     super.initState();
-    _loadActions();
+    _loadMilestone();
   }
 
   @override
@@ -51,16 +51,16 @@ class _HabitCreatePageState extends State<HabitCreatePage> {
     super.dispose();
   }
 
-  Future<void> _loadActions() async {
-    if (widget.milestoneId == null) {
+  Future<void> _loadMilestone() async {
+    if (widget.contextGoalId == null) {
       setState(() => _loading = false);
       return;
     }
-    final actions =
-        await widget.goalService.getActionPlansByMilestone(widget.milestoneId!);
+    final milestone =
+        await widget.goalService.getActiveMilestone(widget.contextGoalId!);
     if (!mounted) return;
     setState(() {
-      _availableActions = actions;
+      _milestoneId = milestone?.id;
       _loading = false;
     });
   }
@@ -73,7 +73,12 @@ class _HabitCreatePageState extends State<HabitCreatePage> {
       );
       return;
     }
-    if (widget.milestoneId == null) return;
+    if (widget.contextGoalId == null || _milestoneId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('无法确定目标里程碑，请从目标面进入')),
+      );
+      return;
+    }
 
     setState(() => _saving = true);
     try {
@@ -89,11 +94,15 @@ class _HabitCreatePageState extends State<HabitCreatePage> {
         }
         freq = custom;
       }
+
+      final actionNames =
+          _actionNames.where((n) => n.trim().isNotEmpty).toList();
+
       await widget.habitService.createHabit(
-        widget.milestoneId!,
+        _milestoneId!,
         name,
         freq,
-        actionPlanIds: _selectedActionIds.toList(),
+        actionNames: actionNames,
         twoMinVer: _twoMinVerController.text.trim().isEmpty
             ? null
             : _twoMinVerController.text.trim(),
@@ -163,31 +172,55 @@ class _HabitCreatePageState extends State<HabitCreatePage> {
                       ],
                       const SizedBox(height: 20),
 
-                      // ── Action Plans ──
-                      _sectionTitle('从行动计划中挑选'),
-                      if (_availableActions.isEmpty)
-                        Text(
-                          '当前里程碑没有行动计划，可直接创建。',
-                          style: TextStyle(
-                              color: colorScheme.onSurface.withAlpha(128)),
-                        )
-                      else
-                        ..._availableActions.map((a) => CheckboxListTile(
-                              value: _selectedActionIds.contains(a.id),
-                              title: Text(a.name),
-                              controlAffinity:
-                                  ListTileControlAffinity.leading,
-                              dense: true,
-                              onChanged: (checked) {
-                                setState(() {
-                                  if (checked == true) {
-                                    _selectedActionIds.add(a.id!);
-                                  } else {
-                                    _selectedActionIds.remove(a.id!);
-                                  }
-                                });
-                              },
-                            )),
+                      // ── Action Items (habit-level) ──
+                      _sectionTitle('行动项（习惯的具体步骤）'),
+                      Text(
+                        '把习惯拆成具体可执行的步骤',
+                        style: TextStyle(
+                            color: colorScheme.onSurface.withAlpha(128),
+                            fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      ..._actionNames.asMap().entries.map((entry) {
+                        final i = entry.key;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller:
+                                      TextEditingController(text: entry.value),
+                                  decoration: InputDecoration(
+                                    hintText: '如：平板支撑 60秒',
+                                    border: const OutlineInputBorder(),
+                                    prefixText: '${i + 1}. ',
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 10),
+                                  ),
+                                  onChanged: (v) => _actionNames[i] = v,
+                                ),
+                              ),
+                              IconButton(
+                                icon: Icon(Icons.close,
+                                    size: 20, color: Colors.grey.shade400),
+                                onPressed: () =>
+                                    setState(() => _actionNames.removeAt(i)),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                      TextButton.icon(
+                        onPressed: () =>
+                            setState(() => _actionNames.add('')),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('添加步骤'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: colorScheme.primary,
+                        ),
+                      ),
                       const SizedBox(height: 20),
 
                       // ── Two-min safety valve ──

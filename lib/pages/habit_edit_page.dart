@@ -24,11 +24,10 @@ class _HabitEditPageState extends State<HabitEditPage> {
   final _nameController = TextEditingController();
   final _twoMinVerController = TextEditingController();
   String _frequency = 'daily';
-  List<ActionPlan> _milestoneActions = [];
-  Set<int> _selectedActionIds = {};
-  Habit? _habit;
+  List<ActionPlan> _actions = [];
   bool _loading = true;
   bool _saving = false;
+  Habit? _habit;
 
   static const _frequencies = [
     ('daily', '每天'),
@@ -59,8 +58,6 @@ class _HabitEditPageState extends State<HabitEditPage> {
     }
 
     final actions =
-        await widget.goalService.getActionPlansByMilestone(habit.milestoneId);
-    final habitActions =
         await widget.habitService.getActionPlansForHabit(habit.id!);
 
     setState(() {
@@ -68,8 +65,7 @@ class _HabitEditPageState extends State<HabitEditPage> {
       _nameController.text = habit.name;
       _twoMinVerController.text = habit.twoMinVer ?? '';
       _frequency = habit.frequency;
-      _milestoneActions = actions;
-      _selectedActionIds = habitActions.map((a) => a.id!).toSet();
+      _actions = actions;
       _loading = false;
     });
   }
@@ -91,11 +87,17 @@ class _HabitEditPageState extends State<HabitEditPage> {
       );
       await widget.habitService.updateHabit(updated);
 
-      // Update action plan associations
-      await widget.habitService.setActionPlansForHabit(
-        _habit!.id!,
-        _selectedActionIds.toList(),
-      );
+      // Rebuild action plans: delete all + re-insert
+      await widget.habitService.deleteActionPlansForHabit(_habit!.id!);
+      for (var i = 0; i < _actions.length; i++) {
+        final a = _actions[i];
+        if (a.name.trim().isNotEmpty) {
+          await widget.habitService.createActionPlan(
+            _habit!.id!, a.name.trim(),
+            sortOrder: i,
+          );
+        }
+      }
 
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -175,28 +177,49 @@ class _HabitEditPageState extends State<HabitEditPage> {
                       ),
                       const SizedBox(height: 20),
 
-                      _sectionTitle('关联行动项'),
-                      if (_milestoneActions.isEmpty)
-                        Text('当前里程碑没有行动计划。',
-                            style: TextStyle(
-                                color: colorScheme.onSurface.withAlpha(128)))
-                      else
-                        ..._milestoneActions.map((a) => CheckboxListTile(
-                              value: _selectedActionIds.contains(a.id),
-                              title: Text(a.name),
-                              controlAffinity:
-                                  ListTileControlAffinity.leading,
-                              dense: true,
-                              onChanged: (checked) {
-                                setState(() {
-                                  if (checked == true) {
-                                    _selectedActionIds.add(a.id!);
-                                  } else {
-                                    _selectedActionIds.remove(a.id!);
-                                  }
-                                });
-                              },
-                            )),
+                      // ── Action Items ──
+                      _sectionTitle('行动项'),
+                      ..._actions.asMap().entries.map((entry) {
+                        final i = entry.key;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: TextEditingController(
+                                      text: entry.value.name),
+                                  decoration: InputDecoration(
+                                    hintText: '步骤名称',
+                                    border: const OutlineInputBorder(),
+                                    prefixText: '${i + 1}. ',
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 10),
+                                  ),
+                                  onChanged: (v) =>
+                                      _actions[i] = _actions[i].copyWith(name: v),
+                                ),
+                              ),
+                              IconButton(
+                                icon: Icon(Icons.close,
+                                    size: 20, color: Colors.grey.shade400),
+                                onPressed: () =>
+                                    setState(() => _actions.removeAt(i)),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                      TextButton.icon(
+                        onPressed: () => setState(() => _actions.add(
+                            ActionPlan(habitId: _habit?.id ?? 0, name: ''))),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('添加步骤'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: colorScheme.primary,
+                        ),
+                      ),
                       const SizedBox(height: 20),
 
                       _sectionTitle('两分钟安全阀'),

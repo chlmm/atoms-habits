@@ -26,18 +26,9 @@ class _GoalCreatePageState extends State<GoalCreatePage> {
   // Step 2
   final List<String> _milestones = [];
 
-  // Step 3
-  final List<String> _actions = [];
-
-  // Step 4 — list of habit definitions
+  // Step 3 — list of habit definitions
   final List<_HabitDraft> _habits = [_HabitDraft()];
   bool _saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _habits.first.setAvailableActions(_actions);
-  }
 
   @override
   void dispose() {
@@ -57,10 +48,6 @@ class _GoalCreatePageState extends State<GoalCreatePage> {
     }
     if (_pageController.page?.round() == 1 && _milestones.isEmpty) {
       _showSnackBar('至少添加一个里程碑');
-      return;
-    }
-    if (_pageController.page?.round() == 2 && _actions.isEmpty) {
-      _showSnackBar('至少添加一个行动');
       return;
     }
     _pageController.nextPage(
@@ -100,36 +87,8 @@ class _GoalCreatePageState extends State<GoalCreatePage> {
 
   // ── Step 3 helpers ──────────────────────────────────
 
-  Future<void> _addAction() async {
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => _inputDialog(ctx, '添加行动', '具体要做什么？'),
-    );
-    if (result != null && result.trim().isNotEmpty) {
-      setState(() {
-        _actions.add(result.trim());
-        for (final h in _habits) {
-          h.setAvailableActions(_actions);
-        }
-      });
-    }
-  }
-
-  void _removeAction(int index) {
-    setState(() {
-      _actions.removeAt(index);
-      for (final h in _habits) {
-        h.setAvailableActions(_actions);
-      }
-    });
-  }
-
-  // ── Step 4 helpers ──────────────────────────────────
-
   void _addHabit() {
-    final draft = _HabitDraft();
-    draft.setAvailableActions(_actions);
-    setState(() => _habits.add(draft));
+    setState(() => _habits.add(_HabitDraft()));
   }
 
   void _removeHabit(int index) {
@@ -148,13 +107,6 @@ class _GoalCreatePageState extends State<GoalCreatePage> {
         return;
       }
     }
-    // Validate at least one action per habit
-    for (final h in _habits) {
-      if (h.selectedIndices.isEmpty) {
-        _showSnackBar('"${h.nameController.text}"至少需要一个行动');
-        return;
-      }
-    }
 
     setState(() => _saving = true);
     try {
@@ -166,23 +118,15 @@ class _GoalCreatePageState extends State<GoalCreatePage> {
         await widget.goalService.createMilestone(goal.id!, m);
       }
 
-      // 3. Create action plans for the first milestone
+      // 3. Create habits with their own action plans
       final activeMs = await widget.goalService.getActiveMilestone(goal.id!);
-      final actionPlanIds = <int>[];
-      for (final a in _actions) {
-        final ap = await widget.goalService.createActionPlan(activeMs!.id!, a);
-        actionPlanIds.add(ap.id!);
-      }
-
-      // 4. Create habits
       for (final h in _habits) {
-        final selectedActionIds =
-            h.selectedIndices.map((i) => actionPlanIds[i]).toList();
+        final actionNames = h.actions.where((a) => a.trim().isNotEmpty).toList();
         await widget.habitService.createHabit(
           activeMs!.id!,
           h.nameController.text.trim(),
           h.frequency,
-          actionPlanIds: selectedActionIds,
+          actionNames: actionNames,
           twoMinVer: h.safetyController.text.trim().isEmpty
               ? null
               : h.safetyController.text.trim(),
@@ -228,7 +172,6 @@ class _GoalCreatePageState extends State<GoalCreatePage> {
         children: [
           _buildStepGoal(),
           _buildStepMilestones(),
-          _buildStepActionPlans(),
           _buildStepHabits(),
         ],
       ),
@@ -361,98 +304,25 @@ class _GoalCreatePageState extends State<GoalCreatePage> {
     );
   }
 
-  // ── Step 3: Action Plans ────────────────────────────
-
-  Widget _buildStepActionPlans() {
-    final colorScheme = Theme.of(context).colorScheme;
-    final firstM = _milestones.isNotEmpty ? _milestones[0] : '';
-
-    return _stepShell(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 16),
-          Text(
-            '为"$firstM"\n列出需要做的行为。',
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          Text('先列出来，后面再打包。',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurface.withValues(alpha: 0.6))),
-          const SizedBox(height: 16),
-          Expanded(
-            child: _actions.isEmpty
-                ? Center(
-                    child: Text('点击底部按钮添加行动',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyLarge
-                            ?.copyWith(
-                                color: colorScheme.onSurface
-                                    .withValues(alpha: 0.4))))
-                : ListView.builder(
-                    itemCount: _actions.length,
-                    itemBuilder: (ctx, i) => Card(
-                      margin: const EdgeInsets.symmetric(vertical: 2),
-                      child: ListTile(
-                        leading: const Icon(Icons.circle_outlined, size: 12),
-                        title: Text('${i + 1}  ${_actions[i]}'),
-                        trailing: IconButton(
-                          icon: Icon(Icons.close,
-                              color: colorScheme.error.withValues(alpha: 0.5)),
-                          onPressed: () => _removeAction(i),
-                        ),
-                      ),
-                    ),
-                  ),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: _addAction,
-            icon: const Icon(Icons.add),
-            label: const Text('添加行动'),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              OutlinedButton(onPressed: _prevPage, child: const Text('上一步')),
-              FilledButton(onPressed: _nextPage, child: const Text('下一步')),
-            ],
-          ),
-          const SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
-
-  // ── Step 4: Habits ──────────────────────────────────
+  // ── Step 3: Habits ──────────────────────────────────
 
   Widget _buildStepHabits() {
     final colorScheme = Theme.of(context).colorScheme;
 
-    final unassigned = _actions
-        .where((a) => !_habits.any((h) => h.isSelected(a)))
-        .toList();
-
     return _stepShell(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: 16),
           Text(
-            '把行动打包成习惯',
+            '定义你的习惯',
             style: Theme.of(context)
                 .textTheme
                 .titleLarge
                 ?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
-          Text('给每组起名、选频率、加安全阀。',
+          Text('每个习惯有自己的行动步骤。给习惯起名、选频率、列出步骤。',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onSurface.withValues(alpha: 0.6))),
           const SizedBox(height: 12),
@@ -474,15 +344,6 @@ class _GoalCreatePageState extends State<GoalCreatePage> {
               },
             ),
           ),
-          if (unassigned.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text('还有 ${unassigned.length} 个行动未分配',
-                  style: TextStyle(
-                    color: Colors.orange.shade700,
-                    fontSize: 12,
-                  )),
-            ),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -564,30 +425,53 @@ class _GoalCreatePageState extends State<GoalCreatePage> {
               },
             ),
             const SizedBox(height: 8),
-            if (_actions.isNotEmpty) ...[
-              Text('从行动计划中挑选：',
-                  style: Theme.of(context).textTheme.labelMedium),
-              const SizedBox(height: 4),
-              for (var j = 0; j < _actions.length; j++)
-                CheckboxListTile(
-                  value: h.selectedIndices.contains(j),
-                  onChanged: (v) {
-                    setState(() {
-                      if (v == true) {
-                        h.selectedIndices.add(j);
-                      } else {
-                        h.selectedIndices.remove(j);
-                      }
-                    });
-                  },
-                  title: Text(_actions[j],
-                      style: Theme.of(context).textTheme.bodyMedium),
-                  dense: true,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  contentPadding: EdgeInsets.zero,
-                  visualDensity: VisualDensity.compact,
+            Text('行动步骤：',
+                style: Theme.of(context).textTheme.labelMedium),
+            const SizedBox(height: 4),
+            ...h.actions.asMap().entries.map((entry) {
+              final j = entry.key;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    Text('${j + 1}. ',
+                        style: TextStyle(
+                            color: colorScheme.outline, fontSize: 13)),
+                    Expanded(
+                      child: TextField(
+                        controller: TextEditingController(text: entry.value),
+                        decoration: const InputDecoration(
+                          hintText: '步骤名称',
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 6),
+                          border: OutlineInputBorder(),
+                        ),
+                        style: const TextStyle(fontSize: 13),
+                        onChanged: (v) => h.actions[j] = v,
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close,
+                          size: 16, color: Colors.grey.shade400),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () =>
+                          setState(() => h.actions.removeAt(j)),
+                    ),
+                  ],
                 ),
-            ],
+              );
+            }),
+            TextButton.icon(
+              onPressed: () => setState(() => h.actions.add('')),
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('添加步骤',
+                  style: TextStyle(fontSize: 12)),
+              style: TextButton.styleFrom(
+                foregroundColor: colorScheme.primary,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
             const SizedBox(height: 8),
             TextField(
               controller: h.safetyController,
@@ -647,21 +531,10 @@ class _GoalCreatePageState extends State<GoalCreatePage> {
   }
 }
 
-/// Internal data class for step 4 habit drafts.
+/// Internal data class for step 3 habit drafts.
 class _HabitDraft {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController safetyController = TextEditingController();
   String frequency = 'daily';
-  final Set<int> selectedIndices = {};
-  List<String> _availableActions = [];
-
-  void setAvailableActions(List<String> actions) {
-    _availableActions = actions;
-    selectedIndices.removeWhere((i) => i >= actions.length);
-  }
-
-  bool isSelected(String action) {
-    final i = _availableActions.indexOf(action);
-    return i >= 0 && selectedIndices.contains(i);
-  }
+  List<String> actions = [];
 }

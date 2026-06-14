@@ -15,7 +15,7 @@ class AppDatabase {
   factory AppDatabase() => _instance;
   AppDatabase._();
 
-  static const int _currentDbVersion = 2;
+  static const int _currentDbVersion = 3;
 
   Database? _db;
   Database get db => _db!;
@@ -111,11 +111,11 @@ class AppDatabase {
     await db.execute('''
       CREATE TABLE action_plans (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        milestone_id INTEGER NOT NULL,
+        habit_id INTEGER NOT NULL,
         name TEXT NOT NULL,
         sort_order INTEGER DEFAULT 0,
         created TEXT DEFAULT (datetime('now')),
-        FOREIGN KEY (milestone_id) REFERENCES milestones(id)
+        FOREIGN KEY (habit_id) REFERENCES habits(id)
       )
     ''');
 
@@ -130,17 +130,6 @@ class AppDatabase {
         archived INTEGER DEFAULT 0,
         created TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (milestone_id) REFERENCES milestones(id)
-      )
-    ''');
-
-    await db.execute('''
-      CREATE TABLE habit_actions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        habit_id INTEGER NOT NULL,
-        action_plan_id INTEGER NOT NULL,
-        sort_order INTEGER DEFAULT 0,
-        FOREIGN KEY (habit_id) REFERENCES habits(id),
-        FOREIGN KEY (action_plan_id) REFERENCES action_plans(id)
       )
     ''');
 
@@ -197,7 +186,44 @@ class AppDatabase {
         )
       ''');
     }
-    // Future migration paths go here
+    if (oldVersion < 3) {
+      // v3: action_plans 从 milestone 级别改为 habit 级别，删除 habit_actions 中间表
+      // 迁移策略：为每个 habit_action 关联创建新的 action_plan(habit_id)，
+      // 然后删旧表重建
+
+      // 1. 读取旧 habit_actions 数据
+      final oldHabitActions = await db.rawQuery('''
+        SELECT ha.habit_id, ap.name, ha.sort_order
+        FROM habit_actions ha
+        INNER JOIN action_plans ap ON ap.id = ha.action_plan_id
+      ''');
+
+      // 2. 删旧 action_plans 和 habit_actions
+      await db.execute('DROP TABLE IF EXISTS habit_actions');
+      await db.execute('DROP TABLE IF EXISTS action_plans');
+
+      // 3. 创建新 action_plans (habit_id)
+      await db.execute('''
+        CREATE TABLE action_plans (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          habit_id INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          sort_order INTEGER DEFAULT 0,
+          created TEXT DEFAULT (datetime('now')),
+          FOREIGN KEY (habit_id) REFERENCES habits(id)
+        )
+      ''');
+
+      // 4. 插入迁移数据
+      for (final row in oldHabitActions) {
+        await db.insert('action_plans', {
+          'habit_id': row['habit_id'],
+          'name': row['name'],
+          'sort_order': row['sort_order'] ?? 0,
+          'created': DateTime.now().toIso8601String(),
+        });
+      }
+    }
   }
 
   // ── Goals ────────────────────────────────────────────
@@ -267,7 +293,7 @@ class AppDatabase {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
-  // ── Action Plans ─────────────────────────────────────
+  // ── Action Plans (habit-level) ──────────────────────
 
   Future<int> insertActionPlan(ActionPlan ap) =>
       db.insert('action_plans', ap.toMap()..remove('id'));
@@ -278,20 +304,16 @@ class AppDatabase {
   Future<int> deleteActionPlan(int id) =>
       db.delete('action_plans', where: 'id = ?', whereArgs: [id]);
 
-  Future<List<ActionPlan>> getActionPlansByMilestone(int milestoneId) async {
+  Future<List<ActionPlan>> getActionPlansForHabit(int habitId) async {
     final rows = await db.query('action_plans',
-        where: 'milestone_id = ?',
-        whereArgs: [milestoneId],
+        where: 'habit_id = ?',
+        whereArgs: [habitId],
         orderBy: 'sort_order ASC');
     return rows.map(ActionPlan.fromMap).toList();
   }
 
-  Future<ActionPlan?> getActionPlan(int id) async {
-    final rows =
-        await db.query('action_plans', where: 'id = ?', whereArgs: [id]);
-    if (rows.isEmpty) return null;
-    return ActionPlan.fromMap(rows.first);
-  }
+  Future<int> deleteActionPlansForHabit(int habitId) =>
+      db.delete('action_plans', where: 'habit_id = ?', whereArgs: [habitId]);
 
   // ── Habits ───────────────────────────────────────────
 
@@ -328,43 +350,6 @@ class AppDatabase {
   Future<List<Habit>> getAllHabits({bool includeArchived = false}) async {
     var where = includeArchived ? null : 'archived = 0';
     final rows = await db.query('habits', where: where, orderBy: 'created ASC');
-    return rows.map(Habit.fromMap).toList();
-  }
-
-  // ── Habit Actions (junction table) ───────────────────
-
-  Future<int> insertHabitAction(int habitId, int actionPlanId,
-      {int sortOrder = 0}) async {
-    return db.insert('habit_actions', {
-      'habit_id': habitId,
-      'action_plan_id': actionPlanId,
-      'sort_order': sortOrder,
-    });
-  }
-
-  Future<int> deleteHabitAction(int id) =>
-      db.delete('habit_actions', where: 'id = ?', whereArgs: [id]);
-
-  Future<int> deleteHabitActionsForHabit(int habitId) =>
-      db.delete('habit_actions', where: 'habit_id = ?', whereArgs: [habitId]);
-
-  Future<List<ActionPlan>> getActionPlansForHabit(int habitId) async {
-    final rows = await db.rawQuery('''
-      SELECT ap.* FROM action_plans ap
-      INNER JOIN habit_actions ha ON ha.action_plan_id = ap.id
-      WHERE ha.habit_id = ?
-      ORDER BY ha.sort_order ASC
-    ''', [habitId]);
-    return rows.map(ActionPlan.fromMap).toList();
-  }
-
-  Future<List<Habit>> getHabitsForActionPlan(int actionPlanId) async {
-    final rows = await db.rawQuery('''
-      SELECT h.* FROM habits h
-      INNER JOIN habit_actions ha ON ha.habit_id = h.id
-      WHERE ha.action_plan_id = ?
-      ORDER BY h.created ASC
-    ''', [actionPlanId]);
     return rows.map(Habit.fromMap).toList();
   }
 
@@ -508,9 +493,8 @@ class AppDatabase {
     final tables = [
       'goals',
       'milestones',
-      'action_plans',
       'habits',
-      'habit_actions',
+      'action_plans',
       'logs',
       'reviews',
       'identity_insights'
@@ -527,7 +511,6 @@ class AppDatabase {
   Future<void> resetAllData() async {
     // Delete in reverse FK order
     await db.delete('identity_insights');
-    await db.delete('habit_actions');
     await db.delete('logs');
     await db.delete('reviews');
     await db.delete('action_plans');

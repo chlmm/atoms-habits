@@ -38,6 +38,7 @@ class MainPageState extends State<MainPage> {
   // ── Navigation state ──
   int _selectedIndex = 1; // 0=goal, 1=habit (default to habit face)
   int? _activeGoalId;
+  int _habitFaceRefreshKey = 0;
   List<Goal> _goals = [];
   String _sortBy = 'created_desc';
 
@@ -86,10 +87,11 @@ class MainPageState extends State<MainPage> {
   // DATA
   // ═══════════════════════════════════════════════════════════
 
-  Future<void> _navigateAndRefresh(String route) async {
-    await Navigator.pushNamed(context, route);
+  Future<void> _navigateAndRefresh(String route, {Object? arguments}) async {
+    await Navigator.pushNamed(context, route, arguments: arguments);
     _loadGoals();
     _loadDrawerData();
+    setState(() => _habitFaceRefreshKey++);
   }
 
   Future<void> _loadGoals() async {
@@ -351,7 +353,7 @@ class MainPageState extends State<MainPage> {
                               _navigateAndRefresh('/create-goal'),
                         )
                       : HabitFacePage(
-                          key: ValueKey('habit_face_$_activeGoalId'),
+                          key: ValueKey('habit_face_${_activeGoalId}_$_habitFaceRefreshKey'),
                           goalService: widget.goalService,
                           habitService: widget.habitService,
                           frequencyService: _frequencyService,
@@ -977,7 +979,8 @@ class MainPageState extends State<MainPage> {
     return FloatingActionButton.large(
       onPressed: () {
         if (_selectedIndex == 1) {
-          _navigateAndRefresh('/create-habit');
+          _navigateAndRefresh('/create-habit',
+              arguments: _activeGoalId);
         } else {
           _navigateAndRefresh('/create-goal');
         }
