@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../services/goal_service.dart';
 import '../services/habit_service.dart';
@@ -23,6 +24,8 @@ class _HabitCreatePageState extends State<HabitCreatePage> {
   final _twoMinVerController = TextEditingController();
   final _customFreqController = TextEditingController();
   String _frequency = 'daily';
+  Set<int> _customDays = {};
+  TimeOfDay? _selectedTime;
   List<String> _actionNames = [];
   bool _loading = true;
   bool _saving = false;
@@ -36,6 +39,8 @@ class _HabitCreatePageState extends State<HabitCreatePage> {
     ('weekly', '每周'),
     ('custom', '自定义'),
   ];
+
+  static const _dayLabels = ['一', '二', '三', '四', '五', '六', '日'];
 
   @override
   void initState() {
@@ -83,20 +88,25 @@ class _HabitCreatePageState extends State<HabitCreatePage> {
     setState(() => _saving = true);
     try {
       String freq = _frequency;
+      String? customDaysJson;
       if (_frequency == 'custom') {
-        final custom = _customFreqController.text.trim();
-        if (custom.isEmpty) {
+        if (_customDays.isEmpty) {
           setState(() => _saving = false);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('请输入自定义频率')),
+            const SnackBar(content: Text('自定义频率请至少选择一天')),
           );
           return;
         }
-        freq = custom;
+        customDaysJson = jsonEncode(_customDays.toList()..sort());
+        freq = 'custom';
       }
 
       final actionNames =
           _actionNames.where((n) => n.trim().isNotEmpty).toList();
+
+      final timeStr = _selectedTime != null
+          ? '${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}'
+          : null;
 
       await widget.habitService.createHabit(
         _milestoneId!,
@@ -106,6 +116,8 @@ class _HabitCreatePageState extends State<HabitCreatePage> {
         twoMinVer: _twoMinVerController.text.trim().isEmpty
             ? null
             : _twoMinVerController.text.trim(),
+        customDays: customDaysJson,
+        time: timeStr,
       );
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -118,6 +130,9 @@ class _HabitCreatePageState extends State<HabitCreatePage> {
       if (mounted) setState(() => _saving = false);
     }
   }
+
+  String get _timeString =>
+      _selectedTime == null ? '' : '${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
@@ -160,16 +175,108 @@ class _HabitCreatePageState extends State<HabitCreatePage> {
                           );
                         }).toList(),
                       ),
+
+                      // ── Custom: 周日历选择 ──
                       if (_frequency == 'custom') ...[
                         const SizedBox(height: 8),
-                        TextField(
-                          controller: _customFreqController,
-                          decoration: const InputDecoration(
-                            hintText: '如：每三天 / 每月两次',
-                            border: OutlineInputBorder(),
+                        Text('选择每周哪几天',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: colorScheme.onSurface.withAlpha(128),
                           ),
                         ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: List.generate(7, (i) {
+                            final weekday = i + 1; // 1=Mon, 7=Sun
+                            final selected = _customDays.contains(weekday);
+                            return GestureDetector(
+                              onTap: () => setState(() {
+                                if (selected) {
+                                  _customDays.remove(weekday);
+                                } else {
+                                  _customDays.add(weekday);
+                                }
+                              }),
+                              child: Container(
+                                width: 38,
+                                height: 38,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: selected
+                                      ? colorScheme.primary
+                                      : colorScheme.surfaceContainerHighest,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    _dayLabels[i],
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: selected
+                                          ? colorScheme.onPrimary
+                                          : colorScheme.onSurface.withAlpha(128),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                        ),
                       ],
+                      const SizedBox(height: 20),
+
+                      // ── Time ──
+                      _sectionTitle('习惯时间（可选）'),
+                      Text(
+                        '设定后，自动生成的待办将携带此时间',
+                        style: TextStyle(
+                            color: colorScheme.onSurface.withAlpha(128),
+                            fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showTimePicker(
+                            context: context,
+                            initialTime: _selectedTime ?? TimeOfDay.now(),
+                          );
+                          if (picked != null && mounted) {
+                            setState(() => _selectedTime = picked);
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: colorScheme.outline.withValues(alpha: 0.5)),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.schedule, size: 20, color: colorScheme.onSurface.withValues(alpha: 0.6)),
+                              const SizedBox(width: 10),
+                              Text(
+                                _timeString.isEmpty ? '选择时间' : _timeString,
+                                style: TextStyle(
+                                  color: _timeString.isEmpty
+                                      ? colorScheme.onSurface.withValues(alpha: 0.4)
+                                      : null,
+                                ),
+                              ),
+                              if (_selectedTime != null) ...[
+                                const Spacer(),
+                                GestureDetector(
+                                  onTap: () => setState(() => _selectedTime = null),
+                                  child: Icon(Icons.close, size: 18, color: colorScheme.onSurface.withValues(alpha: 0.4)),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: 20),
 
                       // ── Action Items (habit-level) ──

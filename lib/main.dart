@@ -4,7 +4,9 @@ import 'db/database.dart';
 import 'services/goal_service.dart';
 import 'services/habit_service.dart';
 import 'services/review_service.dart';
+import 'services/todo_service.dart';
 import 'services/cli_service.dart';
+import 'services/frequency_service.dart';
 import 'pages/main_page.dart';
 import 'app.dart';
 
@@ -25,6 +27,8 @@ void main(List<String> args) async {
   final goalService = GoalService(db);
   final habitService = HabitService(db);
   final reviewService = ReviewService(db);
+  final frequencyService = FrequencyService();
+  final todoService = TodoService(db, frequencyService);
 
   // Global keys for CLI access
   final mainPageKey = GlobalKey<MainPageState>();
@@ -46,6 +50,7 @@ void main(List<String> args) async {
         goalService: goalService,
         habitService: habitService,
         reviewService: reviewService,
+        todoService: todoService,
         mainPageKey: mainPageKey,
         navigatorKey: navigatorKey,
       ),

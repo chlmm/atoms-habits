@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import '../services/goal_service.dart';
 import '../services/habit_service.dart';
+import '../services/todo_service.dart';
 import '../services/frequency_service.dart';
 import '../models/goal.dart';
 import '../models/milestone.dart';
+import '../models/habit.dart';
+import '../models/todo.dart';
 
 class GoalFacePage extends StatefulWidget {
   final GoalService goalService;
   final HabitService habitService;
+  final TodoService? todoService;
   final FrequencyService frequencyService;
   final int? activeGoalId;
   final VoidCallback? onRequestCreateGoal;
@@ -16,6 +20,7 @@ class GoalFacePage extends StatefulWidget {
     super.key,
     required this.goalService,
     required this.habitService,
+    this.todoService,
     required this.frequencyService,
     this.activeGoalId,
     this.onRequestCreateGoal,
@@ -29,6 +34,8 @@ class _GoalFacePageState extends State<GoalFacePage> {
   Goal? _goal;
   List<Milestone> _milestones = [];
   Map<int, double> _milestoneProgress = {};
+  Map<int, List<Habit>> _milestoneHabits = {};
+  Map<int, List<Todo>> _milestoneTodos = {};
   String? _diagnosis;
   bool _loading = true;
 
@@ -91,6 +98,23 @@ class _GoalFacePageState extends State<GoalFacePage> {
 
       _milestoneProgress = progressMap;
       _milestones = ms;
+
+      // 加载每个里程碑的 habits 和 todos
+      final mHab = <int, List<Habit>>{};
+      final mTd = <int, List<Todo>>{};
+      for (final m in ms) {
+        if (m.id != null) {
+          mHab[m.id!] = await widget.habitService.getHabitsByMilestone(m.id!);
+          if (widget.todoService != null) {
+            mTd[m.id!] = await widget.todoService!.getTodosForMilestone(m.id!);
+          } else {
+            mTd[m.id!] = [];
+          }
+        }
+      }
+      _milestoneHabits = mHab;
+      _milestoneTodos = mTd;
+
       _goal = goal;
       _diagnosis = _buildDiagnosis(goal, ms, progressMap);
     } catch (_) {
@@ -503,7 +527,7 @@ class _GoalFacePageState extends State<GoalFacePage> {
       padding: const EdgeInsets.only(bottom: 0),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: isActive ? () => _updateMilestoneProgress(m) : null,
+        onTap: () => _showMilestoneDetail(m),
         onLongPress: () => _showMilestoneMenu(m),
         child: IntrinsicHeight(
           child: Row(
@@ -635,6 +659,483 @@ class _GoalFacePageState extends State<GoalFacePage> {
     );
   }
 
+  /// 里程碑详情页（BottomSheet）
+  Future<void> _showMilestoneDetail(Milestone m) async {
+    final hab = _milestoneHabits[m.id] ?? [];
+    final tds = _milestoneTodos[m.id] ?? [];
+    final prog = _milestoneProgress[m.id] ?? 0.0;
+    final ia = m.status == 'active';
+    final ic = m.status == 'completed';
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) {
+        List<Habit> sHab = List.from(hab);
+        List<Todo> sTds = List.from(tds);
+        return StatefulBuilder(
+          builder: (context, setSheetState) => Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16,
+                MediaQuery.of(context).viewInsets.bottom + 16),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 拖动条
+                  Center(child: Container(width: 40, height: 4,
+                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(2)))),
+                  const SizedBox(height: 16),
+
+                  // 标题栏
+                  Row(children: [
+                    Expanded(child: Text(m.name,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold))),
+                    _statusChip(m), const SizedBox(width: 8),
+                    IconButton(icon: const Icon(Icons.edit_outlined, size: 18), tooltip: '编辑',
+                        onPressed: () { Navigator.pop(ctx); _editMilestone(m); }),
+                    if (ia) IconButton(icon: Icon(Icons.check_circle, size: 18, color: Colors.green.shade700),
+                        tooltip: '标记完成', onPressed: () { Navigator.pop(ctx); _completeMilestone(m); }),
+                  ]),
+
+                  // 进度
+                  if (m.targetValue != null) ...[
+                    const SizedBox(height: 12),
+                    ClipRRect(borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: (m.currentValue ?? 0) / (m.targetValue! > 0 ? m.targetValue! : 1),
+                        minHeight: 8, backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest)),
+                    const SizedBox(height: 4),
+                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                      Text('${m.currentValue ?? 0} / ${m.targetValue}',
+                          style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5))),
+                      Text('完成 ${(prog * 100).round()}%',
+                          style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.primary)),
+                    ]),
+                  ] else if (!ic) ...[
+                    const SizedBox(height: 8),
+                    Text('习惯完成率 ${(prog * 100).round()}%',
+                        style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5))),
+                  ],
+
+                  // 目标描述
+                  if (m.targetDesc != null && m.targetDesc!.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Container(padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(8)),
+                      child: Text(m.targetDesc!, style: TextStyle(fontSize: 13,
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7)))),
+                  ],
+
+                  const Divider(height: 24),
+
+                  // 操作按钮
+                  Text('操作', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    if (ia && m.targetValue != null)
+                      ActionChip(avatar: const Icon(Icons.trending_up, size: 16),
+                          label: const Text('更新进度', style: TextStyle(fontSize: 12)),
+                          onPressed: () { Navigator.pop(ctx); _updateMilestoneProgress(m); }),
+                    if (widget.todoService != null)
+                      ActionChip(avatar: const Icon(Icons.add_task, size: 16, color: Colors.blue),
+                          label: const Text('创建待办', style: TextStyle(fontSize: 12, color: Colors.blue)),
+                          backgroundColor: Colors.blue.shade50,
+                          onPressed: () { Navigator.pop(ctx); _createTodoForMilestone(m); }),
+                    ActionChip(avatar: const Icon(Icons.fitness_center, size: 16, color: Colors.purple),
+                        label: const Text('关联习惯', style: TextStyle(fontSize: 12, color: Colors.purple)),
+                        backgroundColor: Colors.purple.shade50,
+                        onPressed: () { Navigator.pop(ctx); _addHabitToMilestone(m); }),
+                  ]),
+
+                  const Divider(height: 24),
+
+                  // 关联习惯（可删除）
+                  Row(children: [
+                    Icon(Icons.repeat, size: 16, color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 6),
+                    Text('关联习惯 (${sHab.length})', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.primary)),
+                  ]),
+                  const SizedBox(height: 6),
+                  ..._buildDetailHabits(ctx, sHab, setSheetState, m),
+
+                  const SizedBox(height: 12),
+
+                  // 待办事项（可切换/删除）
+                  Row(children: [
+                    Icon(Icons.checklist, size: 16, color: Theme.of(context).colorScheme.tertiary),
+                    const SizedBox(width: 6),
+                    Text('待办事项 (${sTds.length})', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.tertiary)),
+                  ]),
+                  const SizedBox(height: 6),
+                  ..._buildDetailTodos(ctx, sTds, setSheetState),
+
+                  const SizedBox(height: 32),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    _loadData();
+  }
+
+  /// 构建详情页中的习惯列表项
+  List<Widget> _buildDetailHabits(BuildContext ctx, List<Habit> habits, Function ss, Milestone m) {
+    if (habits.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            '暂无关联习惯，点击上方「关联习惯」添加',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.4),
+            ),
+          ),
+        )
+      ];
+    }
+    final items = <Widget>[];
+    for (final h in habits) {
+      items.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: Theme.of(ctx).colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.repeat, size: 14,
+                    color: Theme.of(ctx).colorScheme.primary.withValues(alpha: 0.6)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(h.name, style: const TextStyle(fontSize: 13)),
+                      if (h.time != null)
+                        Text(
+                          '时间：${h.time}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color:
+                                Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.4),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Theme.of(ctx)
+                        .colorScheme
+                        .secondaryContainer
+                        .withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    _frequencyLabel(h.frequency),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Theme.of(ctx)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.5),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                IconButton(
+                  icon: Icon(Icons.delete_outline, size: 16, color: Colors.red.shade400),
+                  tooltip: '解除关联',
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.all(4),
+                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  onPressed: () async {
+                    final ok = await showDialog<bool>(
+                      context: ctx,
+                      builder: (dCtx) => AlertDialog(
+                        title: const Text('解除关联'),
+                        content: Text('确认删除习惯「${h.name}」及其所有数据？'),
+                        actions: [
+                          TextButton(
+                              onPressed: () => Navigator.pop(dCtx, false),
+                              child: const Text('取消')),
+                          FilledButton(
+                              onPressed: () => Navigator.pop(dCtx, true),
+                              child: const Text('删除')),
+                        ],
+                      ),
+                    );
+                    if (ok == true) {
+                      await widget.habitService.deleteHabit(h.id!);
+                      ss(() { habits.removeWhere((x) => x.id == h.id); });
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    return items;
+  }
+
+  /// 构建详情页中的待办列表项
+  List<Widget> _buildDetailTodos(BuildContext ctx, List<Todo> todos, Function ss) {
+    if (todos.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            '暂无待办，点击上方「创建待办」添加',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.4),
+            ),
+          ),
+        )
+      ];
+    }
+    final items = <Widget>[];
+    for (final t in todos) {
+      items.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: Theme.of(ctx).colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Checkbox(
+                  value: t.isCompleted,
+                  onChanged: t.isAutoGenerated
+                      ? null
+                      : (v) async {
+                          await widget.todoService!.toggleTodo(t.id!, v ?? false);
+                          ss(() {
+                            final i = todos.indexWhere((x) => x.id == t.id);
+                            if (i >= 0) {
+                              todos[i] = todos[i].copyWith(isCompleted: v);
+                            }
+                          });
+                        },
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    t.title,
+                    style: TextStyle(
+                      fontSize: 13,
+                      decoration:
+                          t.isCompleted ? TextDecoration.lineThrough : null,
+                      color: t.isCompleted
+                          ? Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.4)
+                          : null,
+                    ),
+                  ),
+                ),
+                if (t.date != _todayStr()) ...[
+                  Text(
+                    t.date,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(ctx)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.4),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                if (t.time != null)
+                  Text(
+                    t.time!,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(ctx)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.4),
+                    ),
+                  ),
+                if (!t.isAutoGenerated)
+                  IconButton(
+                    icon: Icon(Icons.delete_outline, size: 16,
+                        color: Colors.red.shade400),
+                    tooltip: '删除',
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.all(4),
+                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                    onPressed: () async {
+                      await widget.todoService!.deleteTodo(t.id!);
+                      ss(() { todos.removeWhere((x) => x.id == t.id); });
+                    },
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    return items;
+  }
+
+  String _todayStr() {
+    final n = DateTime.now();
+    return '${n.year}-${n.month.toString().padLeft(2,'0')}-${n.day.toString().padLeft(2,'0')}';
+  }
+
+  String _frequencyLabel(String f) => FrequencyService.frequencyLabel(f);
+
+  Future<void> _createTodoForMilestone(Milestone m) async {
+    if (widget.todoService == null) return;
+    final tc = TextEditingController();
+    final dc = TextEditingController(text: _todayStr());
+    final timc = TextEditingController();
+    final r = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('为「${m.name}」创建待办'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: tc, autofocus: true,
+                  decoration: const InputDecoration(labelText: '待办内容', border: OutlineInputBorder())),
+              const SizedBox(height: 12),
+              TextField(controller: dc, keyboardType: TextInputType.datetime,
+                  decoration: const InputDecoration(labelText: '日期 (YYYY-MM-DD)', border: OutlineInputBorder())),
+              const SizedBox(height: 12),
+              TextField(controller: timc,
+                  decoration: const InputDecoration(labelText: '时间 (可选, HH:mm)',
+                    hintText: '如：09:00', border: OutlineInputBorder())),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          FilledButton(onPressed: () {
+            if (tc.text.trim().isNotEmpty && dc.text.trim().isNotEmpty) Navigator.pop(ctx, {
+              'title': tc.text.trim(),
+              'date': dc.text.trim(),
+              'time': timc.text.trim().isEmpty ? null : timc.text.trim(),
+            });
+          }, child: const Text('创建')),
+        ],
+      ),
+    );
+    if (r == null) return;
+    await widget.todoService!.createManualTodo(
+      title: r['title'] as String,
+      milestoneId: m.id,
+      date: r['date'] as String?,
+      time: r['time'] as String?,
+    );
+    await _loadData();
+  }
+
+  Future<void> _addHabitToMilestone(Milestone m) async {
+    String selectedFrequency = 'daily';
+    Set<int> selectedWeekdays = {};
+    final nc = TextEditingController();
+    final tc = TextEditingController();
+    final r = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, dSet) => AlertDialog(
+            title: Text('为「${m.name}」关联习惯'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(controller: nc, autofocus: true,
+                      decoration: const InputDecoration(labelText: '习惯名称', border: OutlineInputBorder())),
+                  const SizedBox(height: 12),
+                  TextField(controller: tc, readOnly: true,
+                      decoration: InputDecoration(
+                        labelText: '提醒时间（可选）',
+                        hintText: '点击选择时间',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(icon: const Icon(Icons.access_time), onPressed: () async {
+                          final t = await showTimePicker(context: context, initialTime: const TimeOfDay(hour: 9, minute: 0));
+                          if (t != null) { tc.text = t.format(context); }
+                        }),
+                      )),
+                  const SizedBox(height: 16),
+                  Text('频率', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                      color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.7))),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 8, runSpacing: 6, children: [
+                    ChoiceChip(label: const Text('每天'), selected: selectedFrequency == 'daily',
+                        onSelected: (_) { dSet(() => selectedFrequency = 'daily'); }),
+                    ChoiceChip(label: const Text('每两天'), selected: selectedFrequency == 'every_other',
+                        onSelected: (_) { dSet(() => selectedFrequency = 'every_other'); }),
+                    ChoiceChip(label: const Text('每周'), selected: selectedFrequency == 'weekly',
+                        onSelected: (_) { dSet(() => selectedFrequency = 'weekly'); }),
+                    ChoiceChip(label: const Text('每周两次'), selected: selectedFrequency == 'twice_week',
+                        onSelected: (_) { dSet(() => selectedFrequency = 'twice_week'); }),
+                    ChoiceChip(label: const Text('自定义'), selected: selectedFrequency == 'custom',
+                        onSelected: (_) { dSet(() => selectedFrequency = 'custom'); }),
+                  ]),
+                  if (selectedFrequency == 'custom') ...[
+                    const SizedBox(height: 10),
+                    Text('选择星期', style: TextStyle(fontSize: 12,
+                        color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5))),
+                    const SizedBox(height: 6),
+                    Wrap(spacing: 6, children: [
+                      for (final entry in <String, int>{'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'日':7}.entries)
+                        FilterChip(label: Text(entry.key), selected: selectedWeekdays.contains(entry.value),
+                            onSelected: (v) { dSet(() { if (v) selectedWeekdays.add(entry.value); else selectedWeekdays.remove(entry.value); }); }),
+                    ]),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+              FilledButton(onPressed: () {
+                if (nc.text.trim().isNotEmpty) Navigator.pop(ctx, {
+                  'name': nc.text.trim(),
+                  'frequency': selectedFrequency,
+                  'customDays': selectedFrequency == 'custom' && selectedWeekdays.isNotEmpty
+                      ? selectedWeekdays.toList() : null,
+                  'time': tc.text.trim().isEmpty ? null : tc.text.trim(),
+                });
+              }, child: const Text('创建')),
+            ],
+          ),
+        );
+      },
+    );
+    if (r == null) return;
+    await widget.habitService.createHabit(m.id!, r['name'] as String, r['frequency'] as String,
+      customDays: r['customDays'] != null
+          ? (r['customDays'] as List).map((e) => e.toString()).join(',') : null,
+      time: r['time'] as String?);
+    await _loadData();
+  }
+
   void _showMilestoneMenu(Milestone m) {
     showModalBottomSheet(
       context: context,
@@ -644,10 +1145,10 @@ class _GoalFacePageState extends State<GoalFacePage> {
           children: [
             ListTile(
               leading: const Icon(Icons.edit),
-              title: const Text('重命名'),
+              title: const Text('编辑'),
               onTap: () {
                 Navigator.pop(ctx);
-                _renameMilestone(m);
+                _editMilestone(m);
               },
             ),
             ListTile(
@@ -694,33 +1195,50 @@ class _GoalFacePageState extends State<GoalFacePage> {
     );
   }
 
-  Future<void> _renameMilestone(Milestone m) async {
-    final controller = TextEditingController(text: m.name);
-    final name = await showDialog<String>(
+  Future<void> _editMilestone(Milestone m) async {
+    final nc = TextEditingController(text: m.name);
+    final dc = TextEditingController(text: m.targetDesc ?? '');
+    final vc = TextEditingController(text: m.targetValue != null ? m.targetValue!.toString() : '');
+    final r = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('重命名里程碑'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: '新名称'),
+        title: const Text('编辑里程碑'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nc, autofocus: true,
+                  decoration: const InputDecoration(labelText: '名称', border: OutlineInputBorder())),
+              const SizedBox(height: 12),
+              TextField(controller: dc, decoration: const InputDecoration(
+                labelText: '目标描述（可选）', hintText: '如：每周跑3次，每次30分钟',
+                border: OutlineInputBorder()), maxLines: 2),
+              const SizedBox(height: 12),
+              TextField(controller: vc, keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: '目标值（可选）',
+                    hintText: '如：100、5公里等，用于追踪进度', border: OutlineInputBorder())),
+            ],
+          ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('确定'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          FilledButton(onPressed: () {
+            Navigator.pop(ctx, {
+              'name': nc.text.trim(),
+              'targetDesc': dc.text.trim().isEmpty ? null : dc.text.trim(),
+              'targetValue': double.tryParse(vc.text),
+            });
+          }, child: const Text('保存')),
         ],
       ),
     );
-    if (name != null && name.isNotEmpty && mounted) {
-      await widget.goalService.updateMilestone(m.copyWith(name: name));
-      await _loadData();
-    }
+    if (r == null) return;
+    await widget.goalService.updateMilestone(m.copyWith(
+      name: r['name'] as String,
+      targetDesc: r['targetDesc'] as String?,
+      targetValue: r['targetValue'] as double?,
+    ));
+    await _loadData();
   }
 
   Future<void> _reorderMilestone(Milestone m, int delta) async {
@@ -756,45 +1274,46 @@ class _GoalFacePageState extends State<GoalFacePage> {
   }
 
   Future<void> _addMilestone() async {
-    final controller = TextEditingController();
-    final result = await showDialog<Map<String, String?>>(
+    final nc = TextEditingController();
+    final dc = TextEditingController();
+    final vc = TextEditingController();
+    final r = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('添加里程碑'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: controller,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: '里程碑名称',
-                hintText: '如：完成 1 个引体向上',
-              ),
-            ),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nc, autofocus: true,
+                  decoration: const InputDecoration(labelText: '里程碑名称', hintText: '如：完成 1 个引体向上',
+                    border: OutlineInputBorder())),
+              const SizedBox(height: 12),
+              TextField(controller: dc, decoration: const InputDecoration(
+                labelText: '目标描述（可选）', hintText: '如：每周跑3次，每次30分钟',
+                border: OutlineInputBorder()), maxLines: 2),
+              const SizedBox(height: 12),
+              TextField(controller: vc, keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: '目标值（可选）',
+                    hintText: '如：100、5公里等，用于追踪进度', border: OutlineInputBorder())),
+            ],
+          ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, {
-              'name': controller.text,
-            }),
-            child: const Text('添加'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          FilledButton(onPressed: () {
+            if (nc.text.trim().isNotEmpty) Navigator.pop(ctx, {
+              'name': nc.text.trim(),
+              'targetDesc': dc.text.trim().isEmpty ? null : dc.text.trim(),
+              'targetValue': double.tryParse(vc.text),
+            });
+          }, child: const Text('添加')),
         ],
       ),
     );
-    if (result == null || result['name'] == null || result['name']!.isEmpty) {
-      return;
-    }
-    await widget.goalService.createMilestone(
-      _goal!.id!,
-      result['name']!,
-    );
+    if (r == null) return;
+    await widget.goalService.createMilestone(_goal!.id!, r['name'] as String,
+      targetDesc: r['targetDesc'] as String?, targetValue: r['targetValue'] as double?);
     await _loadData();
   }
 

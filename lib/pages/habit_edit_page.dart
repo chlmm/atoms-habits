@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../services/goal_service.dart';
 import '../services/habit_service.dart';
@@ -24,6 +25,8 @@ class _HabitEditPageState extends State<HabitEditPage> {
   final _nameController = TextEditingController();
   final _twoMinVerController = TextEditingController();
   String _frequency = 'daily';
+  Set<int> _customDays = {};
+  TimeOfDay? _selectedTime;
   List<ActionPlan> _actions = [];
   bool _loading = true;
   bool _saving = false;
@@ -36,6 +39,8 @@ class _HabitEditPageState extends State<HabitEditPage> {
     ('weekly', '每周'),
     ('custom', '自定义'),
   ];
+
+  static const _dayLabels = ['一', '二', '三', '四', '五', '六', '日'];
 
   @override
   void initState() {
@@ -65,6 +70,14 @@ class _HabitEditPageState extends State<HabitEditPage> {
       _nameController.text = habit.name;
       _twoMinVerController.text = habit.twoMinVer ?? '';
       _frequency = habit.frequency;
+      _customDays = habit.customDaysSet;
+      if (habit.time != null) {
+        final parts = habit.time!.split(':');
+        _selectedTime = TimeOfDay(
+          hour: int.parse(parts[0]),
+          minute: int.parse(parts[1]),
+        );
+      }
       _actions = actions;
       _loading = false;
     });
@@ -77,10 +90,29 @@ class _HabitEditPageState extends State<HabitEditPage> {
 
     setState(() => _saving = true);
     try {
+      String freq = _frequency;
+      String? customDaysJson;
+      if (_frequency == 'custom') {
+        if (_customDays.isEmpty) {
+          setState(() => _saving = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('自定义频率请至少选择一天')),
+          );
+          return;
+        }
+        customDaysJson = jsonEncode(_customDays.toList()..sort());
+      }
+
+      final timeStr = _selectedTime != null
+          ? '${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}'
+          : null;
+
       // Update habit fields
       final updated = _habit!.copyWith(
         name: name,
-        frequency: _frequency,
+        frequency: freq,
+        customDays: customDaysJson,
+        time: timeStr,
         twoMinVer: _twoMinVerController.text.trim().isEmpty
             ? null
             : _twoMinVerController.text.trim(),
@@ -135,6 +167,9 @@ class _HabitEditPageState extends State<HabitEditPage> {
     if (mounted) Navigator.pop(context, true);
   }
 
+  String get _timeString =>
+      _selectedTime == null ? '' : '${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}';
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -174,6 +209,108 @@ class _HabitEditPageState extends State<HabitEditPage> {
                                 setState(() => _frequency = f.$1),
                           );
                         }).toList(),
+                      ),
+
+                      // ── Custom: 周日历选择 ──
+                      if (_frequency == 'custom') ...[
+                        const SizedBox(height: 8),
+                        Text('选择每周哪几天',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: colorScheme.onSurface.withAlpha(128),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: List.generate(7, (i) {
+                            final weekday = i + 1;
+                            final selected = _customDays.contains(weekday);
+                            return GestureDetector(
+                              onTap: () => setState(() {
+                                if (selected) {
+                                  _customDays.remove(weekday);
+                                } else {
+                                  _customDays.add(weekday);
+                                }
+                              }),
+                              child: Container(
+                                width: 38,
+                                height: 38,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: selected
+                                      ? colorScheme.primary
+                                      : colorScheme.surfaceContainerHighest,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    _dayLabels[i],
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: selected
+                                          ? colorScheme.onPrimary
+                                          : colorScheme.onSurface.withAlpha(128),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+
+                      // ── Time ──
+                      _sectionTitle('习惯时间（可选）'),
+                      Text(
+                        '设定后，自动生成的待办将携带此时间',
+                        style: TextStyle(
+                            color: colorScheme.onSurface.withAlpha(128),
+                            fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showTimePicker(
+                            context: context,
+                            initialTime: _selectedTime ?? TimeOfDay.now(),
+                          );
+                          if (picked != null && mounted) {
+                            setState(() => _selectedTime = picked);
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: colorScheme.outline.withValues(alpha: 0.5)),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.schedule, size: 20, color: colorScheme.onSurface.withValues(alpha: 0.6)),
+                              const SizedBox(width: 10),
+                              Text(
+                                _timeString.isEmpty ? '选择时间' : _timeString,
+                                style: TextStyle(
+                                  color: _timeString.isEmpty
+                                      ? colorScheme.onSurface.withValues(alpha: 0.4)
+                                      : null,
+                                ),
+                              ),
+                              if (_selectedTime != null) ...[
+                                const Spacer(),
+                                GestureDetector(
+                                  onTap: () => setState(() => _selectedTime = null),
+                                  child: Icon(Icons.close, size: 18, color: colorScheme.onSurface.withValues(alpha: 0.4)),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 20),
 

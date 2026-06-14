@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'services/goal_service.dart';
 import 'services/habit_service.dart';
 import 'services/review_service.dart';
+import 'services/todo_service.dart';
 import 'pages/onboarding_page.dart';
 import 'pages/goal_create_page.dart';
 import 'pages/main_page.dart';
@@ -16,6 +17,7 @@ class AtomsApp extends StatelessWidget {
   final GoalService goalService;
   final HabitService habitService;
   final ReviewService reviewService;
+  final TodoService todoService;
   final GlobalKey<MainPageState> mainPageKey;
   final GlobalKey<NavigatorState> navigatorKey;
 
@@ -24,6 +26,7 @@ class AtomsApp extends StatelessWidget {
     required this.goalService,
     required this.habitService,
     required this.reviewService,
+    required this.todoService,
     required this.mainPageKey,
     required this.navigatorKey,
   });
@@ -51,6 +54,7 @@ class AtomsApp extends StatelessWidget {
                 goalService: goalService,
                 habitService: habitService,
                 reviewService: reviewService,
+                todoService: todoService,
               ),
             );
           case '/onboarding':
@@ -107,6 +111,7 @@ class AtomsApp extends StatelessWidget {
                 goalService: goalService,
                 habitService: habitService,
                 reviewService: reviewService,
+                todoService: todoService,
               ),
             );
         }

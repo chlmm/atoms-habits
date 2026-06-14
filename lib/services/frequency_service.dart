@@ -7,18 +7,18 @@ import '../models/log_entry.dart';
 /// Pure logic — no DB access. Takes habit + log history as input.
 class FrequencyService {
   /// Returns the target number of executions per week for a given frequency.
-  static int weeklyTarget(String frequency) {
+  static int weeklyTarget(String frequency, {Set<int>? customDays}) {
     switch (frequency) {
       case 'daily':
         return 7;
       case 'every_other':
-        return 4; // ~3.5, rounded up
+        return 4;
       case 'weekly':
         return 1;
       case 'twice_week':
         return 2;
       case 'custom':
-        return 1; // conservative default
+        return customDays?.length ?? 1;
       default:
         return 7;
     }
@@ -53,8 +53,6 @@ class FrequencyService {
     final now = DateTime.now();
     final today = _dateKey(now);
 
-    // If already completed today (full or two_min), still show it
-    // (it will display as "已完成" but we don't hide it)
     final freq = habit.frequencyEnum;
 
     switch (freq) {
@@ -71,8 +69,7 @@ class FrequencyService {
         return _isTrainingDayWeekly(logs, now, target: 2);
 
       case HabitFrequency.custom:
-        // v1 simplification: treat as daily
-        return true;
+        return _isTrainingDayCustom(habit, now);
     }
   }
 
@@ -96,7 +93,7 @@ class FrequencyService {
         return _isTrainingDayWeeklyForDate(logs, date, target: 2);
 
       case HabitFrequency.custom:
-        return true;
+        return _isTrainingDayCustomForDate(habit, date);
     }
   }
 
@@ -175,6 +172,21 @@ class FrequencyService {
     }
 
     return weekCompleted < target;
+  }
+
+  // ── Custom days ────────────────────────────────────────
+
+  /// Custom frequency: check if today's weekday is in the custom_days set
+  bool _isTrainingDayCustom(Habit habit, DateTime now) {
+    final days = habit.customDaysSet;
+    if (days.isEmpty) return true; // no days set → treat as daily
+    return days.contains(now.weekday);
+  }
+
+  bool _isTrainingDayCustomForDate(Habit habit, DateTime date) {
+    final days = habit.customDaysSet;
+    if (days.isEmpty) return true;
+    return days.contains(date.weekday);
   }
 
   // ── Consecutive miss detection ────────────────────────

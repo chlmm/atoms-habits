@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 enum HabitFrequency {
   daily,
   everyOther,
@@ -42,6 +44,8 @@ class Habit {
   final String name;
   final String frequency;
   final String? frequencyDesc;
+  final String? customDays; // JSON array of weekday numbers (1=Mon,7=Sun), e.g. [1,3,5]
+  final String? time; // HH:mm preferred time for this habit
   final String? twoMinVer;
   final bool archived;
   final DateTime created;
@@ -52,6 +56,8 @@ class Habit {
     required this.name,
     this.frequency = 'daily',
     this.frequencyDesc,
+    this.customDays,
+    this.time,
     this.twoMinVer,
     this.archived = false,
     DateTime? created,
@@ -59,12 +65,25 @@ class Habit {
 
   HabitFrequency get frequencyEnum => HabitFrequency.fromString(frequency);
 
+  /// Parse customDays into a Set of weekday integers (1=Mon, 7=Sun)
+  Set<int> get customDaysSet {
+    if (customDays == null || customDays!.isEmpty) return {};
+    try {
+      final list = jsonDecode(customDays!) as List;
+      return list.map((e) => e as int).toSet();
+    } catch (_) {
+      return {};
+    }
+  }
+
   Map<String, dynamic> toMap() => {
         'id': id,
         'milestone_id': milestoneId,
         'name': name,
         'frequency': frequency,
         'frequency_desc': frequencyDesc,
+        'custom_days': customDays,
+        'time': time,
         'two_min_ver': twoMinVer,
         'archived': archived ? 1 : 0,
         'created': created.toIso8601String(),
@@ -76,6 +95,8 @@ class Habit {
         name: map['name'] as String,
         frequency: (map['frequency'] as String?) ?? 'daily',
         frequencyDesc: map['frequency_desc'] as String?,
+        customDays: map['custom_days'] as String?,
+        time: map['time'] as String?,
         twoMinVer: map['two_min_ver'] as String?,
         archived: (map['archived'] as int?) == 1,
         created: DateTime.parse(map['created'] as String),
@@ -87,6 +108,8 @@ class Habit {
     String? name,
     String? frequency,
     String? frequencyDesc,
+    String? customDays,
+    String? time,
     String? twoMinVer,
     bool? archived,
     DateTime? created,
@@ -97,6 +120,8 @@ class Habit {
         name: name ?? this.name,
         frequency: frequency ?? this.frequency,
         frequencyDesc: frequencyDesc ?? this.frequencyDesc,
+        customDays: customDays ?? this.customDays,
+        time: time ?? this.time,
         twoMinVer: twoMinVer ?? this.twoMinVer,
         archived: archived ?? this.archived,
         created: created ?? this.created,

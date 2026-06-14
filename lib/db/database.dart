@@ -9,13 +9,14 @@ import '../models/action_plan.dart';
 import '../models/habit.dart';
 import '../models/log_entry.dart';
 import '../models/review.dart';
+import '../models/todo.dart';
 
 class AppDatabase {
   static final AppDatabase _instance = AppDatabase._();
   factory AppDatabase() => _instance;
   AppDatabase._();
 
-  static const int _currentDbVersion = 3;
+  static const int _currentDbVersion = 7;
 
   Database? _db;
   Database get db => _db!;
@@ -77,6 +78,10 @@ class AppDatabase {
   }
 
   Future<void> _writePrefs(File file, Map<String, dynamic> prefs) async {
+    final dir = file.parent;
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
     await file.writeAsString(jsonEncode(prefs));
   }
 
@@ -126,6 +131,8 @@ class AppDatabase {
         name TEXT NOT NULL,
         frequency TEXT DEFAULT 'daily',
         frequency_desc TEXT,
+        custom_days TEXT,
+        time TEXT,
         two_min_ver TEXT,
         archived INTEGER DEFAULT 0,
         created TEXT DEFAULT (datetime('now')),
@@ -168,6 +175,27 @@ class AppDatabase {
         triggered_by TEXT,
         created TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (goal_id) REFERENCES goals(id)
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE todos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        goal_id INTEGER,
+        milestone_id INTEGER,
+        habit_id INTEGER,
+        action_plan_id INTEGER,
+        date TEXT NOT NULL,
+        time TEXT,
+        is_auto_generated INTEGER DEFAULT 0,
+        is_completed INTEGER DEFAULT 0,
+        sort_order INTEGER DEFAULT 0,
+        created TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (goal_id) REFERENCES goals(id),
+        FOREIGN KEY (milestone_id) REFERENCES milestones(id),
+        FOREIGN KEY (habit_id) REFERENCES habits(id),
+        FOREIGN KEY (action_plan_id) REFERENCES action_plans(id)
       )
     ''');
   }
@@ -223,6 +251,39 @@ class AppDatabase {
           'created': DateTime.now().toIso8601String(),
         });
       }
+    }
+    if (oldVersion < 4) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS todos (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          goal_id INTEGER,
+          habit_id INTEGER,
+          action_plan_id INTEGER,
+          date TEXT NOT NULL,
+          time TEXT,
+          is_auto_generated INTEGER DEFAULT 0,
+          is_completed INTEGER DEFAULT 0,
+          sort_order INTEGER DEFAULT 0,
+          created TEXT DEFAULT (datetime('now')),
+          FOREIGN KEY (goal_id) REFERENCES goals(id),
+          FOREIGN KEY (habit_id) REFERENCES habits(id),
+          FOREIGN KEY (action_plan_id) REFERENCES action_plans(id)
+        )
+      ''');
+    }
+    if (oldVersion < 5) {
+      // v5: todos 增加 time 列
+      await db.execute("ALTER TABLE todos ADD COLUMN time TEXT");
+    }
+    if (oldVersion < 6) {
+      // v6: todos 增加 milestone_id 列
+      await db.execute("ALTER TABLE todos ADD COLUMN milestone_id INTEGER");
+    }
+    if (oldVersion < 7) {
+      // v7: habits 增加 custom_days 和 time 列
+      await db.execute("ALTER TABLE habits ADD COLUMN custom_days TEXT");
+      await db.execute("ALTER TABLE habits ADD COLUMN time TEXT");
     }
   }
 
@@ -487,6 +548,78 @@ class AppDatabase {
   Future<int> deleteReview(int id) =>
       db.delete('reviews', where: 'id = ?', whereArgs: [id]);
 
+  // ── Todos ─────────────────────────────────────────────
+
+  Future<int> insertTodo(Todo todo) =>
+      db.insert('todos', todo.toMap()..remove('id'));
+
+  Future<int> updateTodo(Todo todo) =>
+      db.update('todos', todo.toMap(), where: 'id = ?', whereArgs: [todo.id]);
+
+  Future<int> deleteTodo(int id) =>
+      db.delete('todos', where: 'id = ?', whereArgs: [id]);
+
+  Future<List<Todo>> getTodosForDate(String date) async {
+    final rows = await db.query('todos',
+        where: 'date = ?', whereArgs: [date], orderBy: 'sort_order ASC, created ASC');
+    return rows.map(Todo.fromMap).toList();
+  }
+
+  Future<List<Todo>> getExpiredManualTodos(String todayDate) async {
+    final rows = await db.query('todos',
+        where: "date < ? AND is_auto_generated = 0 AND is_completed = 0",
+        whereArgs: [todayDate],
+        orderBy: 'date ASC, sort_order ASC');
+    return rows.map(Todo.fromMap).toList();
+  }
+
+  Future<int> deleteAutoTodosForDate(String date) =>
+      db.delete('todos', where: "date = ? AND is_auto_generated = 1", whereArgs: [date]);
+
+  Future<int> deleteAutoTodosForHabitAndDate(int habitId, String date) =>
+      db.delete('todos',
+          where: "habit_id = ? AND date = ? AND is_auto_generated = 1",
+          whereArgs: [habitId, date]);
+
+  Future<int> postponeTodos(String oldDate, String newDate) {
+    return db.update('todos', {'date': newDate},
+        where: 'date = ? AND is_auto_generated = 0 AND is_completed = 0',
+        whereArgs: [oldDate]);
+  }
+
+  Future<int> postponeExpiredManualTodos(String todayDate) {
+    return db.update('todos', {'date': todayDate},
+        where: 'date < ? AND is_auto_generated = 0 AND is_completed = 0',
+        whereArgs: [todayDate]);
+  }
+
+  /// 获取指定里程碑下的 Todo（今天的）
+  Future<List<Todo>> getTodosForMilestone(int milestoneId, String date) async {
+    final rows = await db.query('todos',
+        where: 'milestone_id = ? AND date = ?',
+        whereArgs: [milestoneId, date],
+        orderBy: 'sort_order ASC, created ASC');
+    return rows.map(Todo.fromMap).toList();
+  }
+
+  /// 获取指定里程碑下的所有 Todo（不限日期）
+  Future<List<Todo>> getAllTodosForMilestone(int milestoneId) async {
+    final rows = await db.query('todos',
+        where: 'milestone_id = ?',
+        whereArgs: [milestoneId],
+        orderBy: 'date ASC, sort_order ASC, created ASC');
+    return rows.map(Todo.fromMap).toList();
+  }
+
+  /// 获取未来的手动 Todo（日期 > 今天，用于显示即将到来的待办）
+  Future<List<Todo>> getFutureManualTodos(String todayDate) async {
+    final rows = await db.query('todos',
+        where: "date > ? AND is_auto_generated = 0",
+        whereArgs: [todayDate],
+        orderBy: 'date ASC, sort_order ASC');
+    return rows.map(Todo.fromMap).toList();
+  }
+
   // ── CLI Diagnostics ──────────────────────────────────
 
   Future<Map<String, int>> getTableStats() async {
@@ -495,6 +628,7 @@ class AppDatabase {
       'milestones',
       'habits',
       'action_plans',
+      'todos',
       'logs',
       'reviews',
       'identity_insights'
@@ -510,6 +644,7 @@ class AppDatabase {
 
   Future<void> resetAllData() async {
     // Delete in reverse FK order
+    await db.delete('todos');
     await db.delete('identity_insights');
     await db.delete('logs');
     await db.delete('reviews');

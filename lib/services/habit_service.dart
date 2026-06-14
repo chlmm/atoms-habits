@@ -20,6 +20,8 @@ class HabitService {
     List<String>? actionNames,
     String? twoMinVer,
     String? frequencyDesc,
+    String? customDays,
+    String? time,
   }) async {
     final habit = Habit(
       milestoneId: milestoneId,
@@ -27,6 +29,8 @@ class HabitService {
       frequency: frequency,
       twoMinVer: twoMinVer,
       frequencyDesc: frequencyDesc,
+      customDays: customDays,
+      time: time,
     );
     final id = await _db.insertHabit(habit);
     final created = habit.copyWith(id: id);
@@ -54,6 +58,9 @@ class HabitService {
   Future<void> deleteHabit(int id) => _db.deleteHabit(id);
 
   Future<void> archiveHabit(int id) => _db.archiveHabit(id);
+
+  Future<List<Habit>> getAllHabits({bool includeArchived = false}) =>
+      _db.getAllHabits(includeArchived: includeArchived);
 
   // ── Action Plans (habit-level) ────────────────────────
 

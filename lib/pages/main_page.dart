@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/goal_service.dart';
 import '../services/habit_service.dart';
 import '../services/review_service.dart';
+import '../services/todo_service.dart';
 import '../services/frequency_service.dart';
 import '../models/goal.dart';
 import '../models/milestone.dart';
@@ -10,6 +11,7 @@ import '../widgets/drawer_heatmap.dart';
 import '../widgets/day_detail_sheet.dart';
 import 'habit_face_page.dart';
 import 'goal_face_page.dart';
+import 'todo_face_page.dart';
 
 /// R3: 移动端优先主框架。
 ///
@@ -20,12 +22,14 @@ class MainPage extends StatefulWidget {
   final GoalService goalService;
   final HabitService habitService;
   final ReviewService reviewService;
+  final TodoService todoService;
 
   const MainPage({
     super.key,
     required this.goalService,
     required this.habitService,
     required this.reviewService,
+    required this.todoService,
   });
 
   @override
@@ -36,9 +40,10 @@ class MainPageState extends State<MainPage> {
   final FrequencyService _frequencyService = FrequencyService();
 
   // ── Navigation state ──
-  int _selectedIndex = 1; // 0=goal, 1=habit (default to habit face)
+  int _selectedIndex = 1; // 0=goal, 1=habit, 2=todo (default to habit face)
   int? _activeGoalId;
   int _habitFaceRefreshKey = 0;
+  int _todoFaceRefreshKey = 0;
   List<Goal> _goals = [];
   String _sortBy = 'created_desc';
 
@@ -66,7 +71,7 @@ class MainPageState extends State<MainPage> {
 
   // Expose state for CLI
   int? get activeGoalId => _activeGoalId;
-  String get currentFace => _selectedIndex == 0 ? 'goal' : 'habit';
+  String get currentFace => _selectedIndex == 0 ? 'goal' : _selectedIndex == 1 ? 'habit' : 'todo';
   String get sortBy => _sortBy;
 
   @override
@@ -91,7 +96,10 @@ class MainPageState extends State<MainPage> {
     await Navigator.pushNamed(context, route, arguments: arguments);
     _loadGoals();
     _loadDrawerData();
-    setState(() => _habitFaceRefreshKey++);
+    setState(() {
+      _habitFaceRefreshKey++;
+      _todoFaceRefreshKey++;
+    });
   }
 
   Future<void> _loadGoals() async {
@@ -306,7 +314,9 @@ class MainPageState extends State<MainPage> {
 
   // Public API for CLI
   void cliSwitchFace(String face) {
-    setState(() => _selectedIndex = face == 'goal' ? 0 : 1);
+    setState(() {
+      _selectedIndex = face == 'goal' ? 0 : face == 'todo' ? 2 : 1;
+    });
   }
 
   void cliSwitchGoal(int goalId) {
@@ -348,19 +358,27 @@ class MainPageState extends State<MainPage> {
                           goalService: widget.goalService,
                           habitService: widget.habitService,
                           frequencyService: _frequencyService,
+                          todoService: widget.todoService,
                           activeGoalId: _activeGoalId,
                           onRequestCreateGoal: () =>
                               _navigateAndRefresh('/create-goal'),
                         )
-                      : HabitFacePage(
-                          key: ValueKey('habit_face_${_activeGoalId}_$_habitFaceRefreshKey'),
-                          goalService: widget.goalService,
-                          habitService: widget.habitService,
-                          frequencyService: _frequencyService,
-                          activeGoalId: _activeGoalId,
-                          onRequestCreateHabit: () =>
-                              _navigateAndRefresh('/create-habit'),
-                        ),
+                      : _selectedIndex == 1
+                          ? HabitFacePage(
+                              key: ValueKey('habit_face_${_activeGoalId}_$_habitFaceRefreshKey'),
+                              goalService: widget.goalService,
+                              habitService: widget.habitService,
+                              frequencyService: _frequencyService,
+                              activeGoalId: _activeGoalId,
+                              onRequestCreateHabit: () =>
+                                  _navigateAndRefresh('/create-habit'),
+                            )
+                          : TodoFacePage(
+                              key: ValueKey('todo_face_$_todoFaceRefreshKey'),
+                              todoService: widget.todoService,
+                              goalService: widget.goalService,
+                              habitService: widget.habitService,
+                            ),
             ),
           ),
         ],
@@ -458,6 +476,14 @@ class MainPageState extends State<MainPage> {
               label: '习惯面',
               selected: _selectedIndex == 1,
               onTap: () => setState(() { _selectedIndex = 1; Navigator.pop(context); }),
+              colorScheme: colorScheme,
+            ),
+            _drawerTile(
+              icon: Icons.checklist_outlined,
+              selectedIcon: Icons.checklist,
+              label: 'Todo面',
+              selected: _selectedIndex == 2,
+              onTap: () => setState(() { _selectedIndex = 2; Navigator.pop(context); }),
               colorScheme: colorScheme,
             ),
 
@@ -976,6 +1002,9 @@ class MainPageState extends State<MainPage> {
   // ═══════════════════════════════════════════════════════════
 
   Widget? _buildFAB(ColorScheme colorScheme) {
+    // Todo 面自带添加按钮，不需要全局 FAB
+    if (_selectedIndex == 2) return null;
+
     return FloatingActionButton.large(
       onPressed: () {
         if (_selectedIndex == 1) {
