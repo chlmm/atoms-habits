@@ -7,6 +7,7 @@ import '../models/goal.dart';
 import '../models/milestone.dart';
 import '../models/habit.dart';
 import '../models/todo.dart';
+import '../components/empty_state.dart';
 
 class GoalFacePage extends StatefulWidget {
   final GoalService goalService;
@@ -365,7 +366,15 @@ class _GoalFacePageState extends State<GoalFacePage> {
     }
 
     if (_goal == null) {
-      return _buildEmptyState(colorScheme);
+      return EmptyState(
+        icon: Icons.flag_outlined,
+        message: '还没有目标。\n设定目标后，这里会显示进度和里程碑。',
+        action: OutlinedButton.icon(
+          onPressed: widget.onRequestCreateGoal,
+          icon: const Icon(Icons.add),
+          label: const Text('创建目标'),
+        ),
+      );
     }
 
     final totalMs = _milestones.length;
@@ -418,35 +427,6 @@ class _GoalFacePageState extends State<GoalFacePage> {
             ),
           const SizedBox(height: 80),
         ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(ColorScheme colorScheme) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.flag_outlined, size: 64,
-                color: colorScheme.onSurface.withValues(alpha: 0.2)),
-            const SizedBox(height: 16),
-            Text(
-              '还没有目标。\n设定目标后，这里会显示进度和里程碑。',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: colorScheme.onSurface.withValues(alpha: 0.4),
-                  ),
-            ),
-            const SizedBox(height: 24),
-            OutlinedButton.icon(
-              onPressed: widget.onRequestCreateGoal,
-              icon: const Icon(Icons.add),
-              label: const Text('创建目标'),
-            ),
-          ],
-        ),
       ),
     );
   }

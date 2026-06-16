@@ -58,13 +58,19 @@ else
     log_info "使用已有二进制（如需重新编译请先 flutter build linux --debug）"
 fi
 
-# ── 3. 杀掉旧进程 ────────────────────────────────────────
-OLD_PID=$(pgrep -f "intermediates_do_not_run/atoms" 2>/dev/null || true)
-if [ -n "$OLD_PID" ]; then
+# ── 3. 杀掉所有旧 atoms 进程 ──────────────────────────────
+OLD_PIDS=$(pgrep -f "/atoms" 2>/dev/null || true)
+if [ -n "$OLD_PIDS" ]; then
     log_info "停止旧进程…"
-    kill "$OLD_PID" 2>/dev/null || true
+    echo "$OLD_PIDS" | xargs kill 2>/dev/null || true
+    sleep 1
+    # 确保都死了
+    echo "$OLD_PIDS" | xargs kill -9 2>/dev/null || true
     sleep 1
 fi
+# 释放 CliBridge 端口
+fuser -k 9999/tcp 2>/dev/null || true
+sleep 1
 
 # ── 4. 启动 ──────────────────────────────────────────────
 log_info "启动 Atoms…"

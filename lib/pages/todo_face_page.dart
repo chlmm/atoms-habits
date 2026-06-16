@@ -7,6 +7,7 @@ import '../models/todo.dart';
 import '../models/goal.dart';
 import '../models/habit.dart';
 import '../models/milestone.dart';
+import '../components/empty_state.dart';
 
 class TodoFacePage extends StatefulWidget {
   final TodoService todoService;
@@ -250,7 +251,7 @@ class _TodoFacePageState extends State<TodoFacePage> {
             // ── Today's todos ──
             Expanded(
               child: _todayTodos.isEmpty && _expiredTodos.isEmpty && _futureTodos.isEmpty
-                  ? _buildEmptyState(colorScheme)
+                  ? const EmptyState(icon: Icons.checklist_outlined, message: '今天没有待办事项。\n好好休息或创建一个吧！')
                   : ListView(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                       children: [
@@ -298,28 +299,6 @@ class _TodoFacePageState extends State<TodoFacePage> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildEmptyState(ColorScheme colorScheme) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.checklist_outlined, size: 64,
-                color: colorScheme.onSurface.withValues(alpha: 0.15)),
-            const SizedBox(height: 16),
-            Text(
-              '今天没有待办事项。\n好好休息或创建一个吧！',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  color: colorScheme.onSurface.withValues(alpha: 0.4)),
-            ),
-          ],
-        ),
-      ),
     );
   }
 

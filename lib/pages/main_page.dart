@@ -6,9 +6,9 @@ import '../services/todo_service.dart';
 import '../services/frequency_service.dart';
 import '../models/goal.dart';
 import '../models/milestone.dart';
-import '../widgets/drawer_stats.dart';
-import '../widgets/drawer_heatmap.dart';
-import '../widgets/day_detail_sheet.dart';
+import '../components/heatmap.dart';
+import '../components/stats_row.dart';
+import '../components/day_detail_sheet.dart';
 import 'habit_face_page.dart';
 import 'goal_face_page.dart';
 import 'todo_face_page.dart';
@@ -428,10 +428,12 @@ class MainPageState extends State<MainPage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
               child: _drawerDataLoaded
-                  ? DrawerStats(
-                      habitCount: _habitCount,
-                      goalCount: _goalCount,
-                      activeDays: _activeDays,
+                  ? StatsRow(
+                      items: [
+                        StatItem(value: '$_habitCount', label: '习惯'),
+                        StatItem(value: '$_goalCount', label: '目标'),
+                        StatItem(value: '$_activeDays', label: '天'),
+                      ],
                     )
                   : _loadingPlaceholder(colorScheme),
             ),
@@ -440,7 +442,7 @@ class MainPageState extends State<MainPage> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
               child: _drawerDataLoaded
-                  ? DrawerHeatmap(
+                  ? Heatmap(
                       dailyCounts: _dailyCounts,
                       colorScheme: colorScheme,
                       onDayTap: (date, count) {

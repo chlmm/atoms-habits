@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
 /// Dialog that shows an identity insight suggestion.
+///
 /// Returns:
 ///   'accepted' if user accepts
-///   'modified' with new text if user chooses to modify
+///   modified text if user chooses to modify
 ///   null if user dismisses
 Future<String?> showIdentityInsightDialog(
   BuildContext context, {

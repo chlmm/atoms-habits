@@ -4,6 +4,8 @@ import '../services/goal_service.dart';
 import '../services/habit_service.dart';
 import '../models/habit.dart';
 import '../models/action_plan.dart';
+import '../components/save_button.dart';
+import '../components/section_title.dart';
 
 class HabitEditPage extends StatefulWidget {
   final GoalService goalService;
@@ -193,11 +195,11 @@ class _HabitEditPageState extends State<HabitEditPage> {
                   child: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
-                      _sectionTitle('习惯名称'),
+                      SectionTitle('习惯名称'),
                       TextField(controller: _nameController),
                       const SizedBox(height: 20),
 
-                      _sectionTitle('频率'),
+                      SectionTitle('频率'),
                       Wrap(
                         spacing: 8,
                         children: _frequencies.map((f) {
@@ -263,7 +265,7 @@ class _HabitEditPageState extends State<HabitEditPage> {
                       const SizedBox(height: 20),
 
                       // ── Time ──
-                      _sectionTitle('习惯时间（可选）'),
+                      SectionTitle('习惯时间（可选）'),
                       Text(
                         '设定后，自动生成的待办将携带此时间',
                         style: TextStyle(
@@ -315,7 +317,7 @@ class _HabitEditPageState extends State<HabitEditPage> {
                       const SizedBox(height: 20),
 
                       // ── Action Items ──
-                      _sectionTitle('行动项'),
+                      SectionTitle('行动项'),
                       ..._actions.asMap().entries.map((entry) {
                         final i = entry.key;
                         return Padding(
@@ -359,45 +361,16 @@ class _HabitEditPageState extends State<HabitEditPage> {
                       ),
                       const SizedBox(height: 20),
 
-                      _sectionTitle('两分钟安全阀'),
+                      SectionTitle('两分钟安全阀'),
                       TextField(controller: _twoMinVerController),
                       const SizedBox(height: 32),
                     ],
                   ),
                 ),
-                _buildSaveButton(colorScheme),
+                SaveButton(label: '保存', onPressed: _saving ? null : _save, isSaving: _saving),
               ],
             ),
     );
   }
 
-  Widget _sectionTitle(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        text,
-        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-      ),
-    );
-  }
-
-  Widget _buildSaveButton(ColorScheme colorScheme) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      child: FilledButton(
-        onPressed: _saving ? null : _save,
-        style: FilledButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-        ),
-        child: _saving
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Text('保存', style: TextStyle(fontSize: 16)),
-      ),
-    );
-  }
 }

@@ -6,6 +6,7 @@ import '../models/habit.dart';
 import '../models/action_plan.dart';
 import '../models/log_entry.dart';
 import '../models/milestone.dart';
+import '../components/week_strip.dart';
 
 class HabitDetailPage extends StatefulWidget {
   final GoalService goalService;
@@ -131,7 +132,12 @@ class _HabitDetailPageState extends State<HabitDetailPage> {
           const SizedBox(height: 16),
           _buildProgressSection(colorScheme),
           const SizedBox(height: 16),
-          _buildWeekStrip(colorScheme),
+          WeekStrip(
+            habit: _habit,
+            recentStatuses: _recentStatuses,
+            allLogs: _allLogs,
+            frequencyService: widget.frequencyService,
+          ),
           const SizedBox(height: 16),
           _buildNeverMissTwice(colorScheme),
           const SizedBox(height: 16),
@@ -218,137 +224,6 @@ class _HabitDetailPageState extends State<HabitDetailPage> {
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
         ]),
       ),
-    );
-  }
-
-  Widget _buildWeekStrip(ColorScheme colorScheme) {
-    final now = DateTime.now();
-    final habit = _habit;
-    const dayNames = ['一', '二', '三', '四', '五', '六', '日'];
-    const totalDays = 14;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('近两周日程',
-                style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: colorScheme.onSurface)),
-            const SizedBox(height: 4),
-            // 图例
-            Wrap(
-              spacing: 12,
-              children: [
-                _buildLegend(Colors.green, '已完成'),
-                _buildLegend(Colors.orange, '两分钟版'),
-                _buildLegend(Colors.grey, '已跳过'),
-                _buildLegend(colorScheme.primary.withValues(alpha: 0.3), '训练日'),
-                _buildLegend(Colors.grey.shade200, '休息日'),
-              ],
-            ),
-            const SizedBox(height: 12),
-            // 两行：过去7天 + 未来7天
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: List.generate(totalDays, (i) {
-                final offset = i - 7; // -7 ~ +6
-                final date = now.add(Duration(days: offset));
-                final dateStr =
-                    '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-                final status = _recentStatuses[dateStr];
-                final isFull = status == 'full';
-                final isTwoMin = status == 'two_min';
-                final isSkipped = status == 'skipped';
-                final isToday = offset == 0;
-                final isPast = offset < 0;
-                final isFuture = offset > 0;
-
-                // 训练日判断
-                final isTrainingDay = habit != null &&
-                    widget.frequencyService.isTrainingDayForDate(habit, _allLogs, date);
-
-                Color bgColor;
-                Widget? icon;
-                Color borderColor = Colors.transparent;
-                double borderWidth = 0;
-
-                if (isFull) {
-                  bgColor = Colors.green;
-                  icon = const Icon(Icons.check, color: Colors.white, size: 14);
-                } else if (isTwoMin) {
-                  bgColor = Colors.orange;
-                  icon = const Icon(Icons.check, color: Colors.white, size: 14);
-                } else if (isSkipped) {
-                  bgColor = Colors.grey.shade400;
-                  icon = const Icon(Icons.close, color: Colors.white, size: 12);
-                } else if (isTrainingDay) {
-                  bgColor = colorScheme.primary.withValues(alpha: 0.15);
-                  icon = isFuture
-                      ? Icon(Icons.fiber_manual_record,
-                          size: 8, color: colorScheme.primary.withValues(alpha: 0.5))
-                      : null;
-                } else {
-                  bgColor = Colors.grey.shade200;
-                }
-
-                if (isToday) {
-                  borderColor = colorScheme.primary;
-                  borderWidth = 2;
-                }
-
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 26, height: 26,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: bgColor,
-                        border: borderWidth > 0
-                            ? Border.all(color: borderColor, width: borderWidth)
-                            : null,
-                      ),
-                      child: Center(child: icon),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(date.day.toString(),
-                        style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: isToday ? FontWeight.bold : null,
-                            color: isFuture ? colorScheme.outline : null)),
-                    Text(dayNames[date.weekday - 1],
-                        style: TextStyle(
-                            fontSize: 9,
-                            color: isTrainingDay
-                                ? colorScheme.primary
-                                : colorScheme.outline.withValues(alpha: 0.5))),
-                  ],
-                );
-              }),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLegend(Color color, String label) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 10, height: 10,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: color,
-          ),
-        ),
-        const SizedBox(width: 3),
-        Text(label, style: const TextStyle(fontSize: 10)),
-      ],
     );
   }
 

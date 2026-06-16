@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/goal_service.dart';
 import '../services/habit_service.dart';
 import '../data/demo_data.dart';
+import '../components/page_indicator.dart';
 
 class OnboardingPage extends StatefulWidget {
   final GoalService goalService;
@@ -125,7 +126,15 @@ class _OnboardingPageState extends State<OnboardingPage> {
               ],
             ),
           ),
-          _buildPageIndicator(colorScheme),
+          PageIndicator(
+            currentPage: _currentPage,
+            totalPages: _totalPages,
+            onDotTap: (index) => _pageController.animateToPage(
+              index,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+            ),
+          ),
         ],
       ),
     );
@@ -633,36 +642,4 @@ class _OnboardingPageState extends State<OnboardingPage> {
     );
   }
 
-  Widget _buildPageIndicator(ColorScheme colorScheme) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 16, top: 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(_totalPages, (index) {
-            final isActive = index == _currentPage;
-            return GestureDetector(
-              onTap: () => _pageController.animateToPage(
-                index,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-              ),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                width: isActive ? 24 : 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: isActive
-                      ? colorScheme.primary
-                      : colorScheme.outline.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-            );
-          }),
-        ),
-      ),
-    );
-  }
 }

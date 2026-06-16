@@ -7,6 +7,8 @@ import '../models/habit.dart';
 import '../models/milestone.dart';
 import '../models/review.dart';
 import '../models/log_entry.dart';
+import '../components/habit_grid.dart';
+import '../components/save_button.dart';
 
 class ReviewPage extends StatefulWidget {
   final GoalService goalService;
@@ -194,11 +196,25 @@ class _ReviewPageState extends State<ReviewPage> {
                     const SizedBox(height: 16),
                     _buildWeekHeader(colorScheme),
                     const SizedBox(height: 24),
-                    _buildHabitGrid(colorScheme),
+                    HabitGrid(
+                      habits: (() {
+                        final all = <Habit>[];
+                        for (final m in _milestones) {
+                          all.addAll(_milestoneHabits[m.id] ?? []);
+                        }
+                        return all;
+                      })(),
+                      habitWeekStatuses: _habitWeekStatuses,
+                      dates: _dates,
+                    ),
                     const SizedBox(height: 24),
                     _buildReflectionQuestions(colorScheme),
                     const SizedBox(height: 16),
-                    _buildSaveButton(colorScheme),
+                    SaveButton(
+                      label: _existingReview != null ? '更新回顾' : '保存回顾',
+                      onPressed: _saveReview,
+                      icon: _existingReview != null ? Icons.edit : Icons.save,
+                    ),
                     const SizedBox(height: 24),
                     _buildPastReviews(colorScheme),
                   ],
@@ -270,81 +286,6 @@ class _ReviewPageState extends State<ReviewPage> {
     );
   }
 
-  Widget _buildHabitGrid(ColorScheme colorScheme) {
-    // Flatten all habits from all milestones
-    final allHabits = <Habit>[];
-    for (final m in _milestones) {
-      allHabits.addAll(_milestoneHabits[m.id] ?? []);
-    }
-
-    if (allHabits.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Text('暂无活跃习惯', style: TextStyle(color: colorScheme.onSurfaceVariant)),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('习惯完成情况',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: colorScheme.onSurface)),
-        const SizedBox(height: 8),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              children: allHabits.map((habit) {
-                final statuses = _habitWeekStatuses[habit.id] ?? {};
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(children: [
-                    SizedBox(
-                      width: 80,
-                      child: Text(habit.name,
-                          style: const TextStyle(fontSize: 13),
-                          overflow: TextOverflow.ellipsis, maxLines: 2),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Row(
-                        children: List.generate(7, (i) {
-                          final status = statuses[_dates[i]];
-                          final done = _isCompleted(status);
-                          final isTwoMin = status == 'two_min';
-                          return Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 2),
-                              child: AspectRatio(
-                                aspectRatio: 1,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: done
-                                        ? (isTwoMin ? Colors.orange : colorScheme.primary)
-                                        : status == 'skipped'
-                                            ? Colors.grey.shade400
-                                            : Colors.grey.shade200,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        }),
-                      ),
-                    ),
-                  ]),
-                );
-              }).toList(),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildReflectionQuestions(ColorScheme colorScheme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -386,17 +327,6 @@ class _ReviewPageState extends State<ReviewPage> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildSaveButton(ColorScheme colorScheme) {
-    return SizedBox(
-      width: double.infinity,
-      child: FilledButton.icon(
-        onPressed: _saveReview,
-        icon: Icon(_existingReview != null ? Icons.edit : Icons.save),
-        label: Text(_existingReview != null ? '更新回顾' : '保存回顾'),
-      ),
     );
   }
 

@@ -4,6 +4,8 @@ import '../services/habit_service.dart';
 import '../models/habit.dart';
 import '../models/action_plan.dart';
 import '../models/log_entry.dart';
+import '../components/empty_state.dart';
+import '../components/status_icon.dart';
 
 class BootstrapHabitPage extends StatefulWidget {
   final GoalService goalService;
@@ -207,32 +209,10 @@ class _BootstrapHabitPageState extends State<BootstrapHabitPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _goalName == null
-              ? _buildEmptyState(colorScheme, '还没有目标。\n去创建一个吧！')
+              ? const EmptyState(icon: Icons.self_improvement, message: '还没有目标。\n去创建一个吧！')
               : _milestoneName == null
-                  ? _buildEmptyState(colorScheme, '里程碑已完成。\n去目标面添加新里程碑！')
+                  ? const EmptyState(icon: Icons.self_improvement, message: '里程碑已完成。\n去目标面添加新里程碑！')
                   : _buildHabitList(colorScheme),
-    );
-  }
-
-  Widget _buildEmptyState(ColorScheme colorScheme, String message) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.self_improvement, size: 64,
-                color: colorScheme.onSurface.withValues(alpha: 0.2)),
-            const SizedBox(height: 16),
-            Text(message,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyLarge
-                    ?.copyWith(color: colorScheme.onSurface.withValues(alpha: 0.4)),
-                textAlign: TextAlign.center),
-          ],
-        ),
-      ),
     );
   }
 
@@ -302,7 +282,15 @@ class _BootstrapHabitPageState extends State<BootstrapHabitPage> {
             // Header
             Row(
               children: [
-                _buildStatusIcon(isCompleted, isTwoMin, isSkipped),
+                StatusIcon(
+                  type: isCompleted
+                      ? StatusIconType.completed
+                      : isTwoMin
+                          ? StatusIconType.twoMin
+                          : isSkipped
+                              ? StatusIconType.skipped
+                              : StatusIconType.pending,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -422,47 +410,7 @@ class _BootstrapHabitPageState extends State<BootstrapHabitPage> {
     );
   }
 
-  Widget _buildStatusIcon(bool isCompleted, bool isTwoMin, bool isSkipped) {
-    if (isCompleted) {
-      return Container(
-        width: 40, height: 40,
-        decoration: BoxDecoration(
-          color: Colors.green.shade50,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: const Icon(Icons.check_circle, color: Colors.green, size: 28),
-      );
-    }
-    if (isTwoMin) {
-      return Container(
-        width: 40, height: 40,
-        decoration: BoxDecoration(
-          color: Colors.orange.shade50,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Icon(Icons.check_circle_outline,
-            color: Colors.orange.shade600, size: 28),
-      );
-    }
-    if (isSkipped) {
-      return Container(
-        width: 40, height: 40,
-        decoration: BoxDecoration(
-          color: Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: const Icon(Icons.cancel_outlined, color: Colors.grey, size: 28),
-      );
-    }
-    return Container(
-      width: 40, height: 40,
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Icon(Icons.circle_outlined, color: Colors.grey.shade400, size: 28),
-    );
-  }
+
 
   String _frequencyLabel(String f) {
     switch (f) {

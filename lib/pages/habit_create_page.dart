@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../services/goal_service.dart';
 import '../services/habit_service.dart';
+import '../components/save_button.dart';
+import '../components/section_title.dart';
 
 class HabitCreatePage extends StatefulWidget {
   final GoalService goalService;
@@ -151,7 +153,7 @@ class _HabitCreatePageState extends State<HabitCreatePage> {
                     padding: const EdgeInsets.all(16),
                     children: [
                       // ── Name ──
-                      _sectionTitle('习惯名称'),
+                      SectionTitle('习惯名称'),
                       TextField(
                         controller: _nameController,
                         decoration: const InputDecoration(
@@ -162,7 +164,7 @@ class _HabitCreatePageState extends State<HabitCreatePage> {
                       const SizedBox(height: 20),
 
                       // ── Frequency ──
-                      _sectionTitle('频率'),
+                      SectionTitle('频率'),
                       Wrap(
                         spacing: 8,
                         children: _frequencies.map((f) {
@@ -228,7 +230,7 @@ class _HabitCreatePageState extends State<HabitCreatePage> {
                       const SizedBox(height: 20),
 
                       // ── Time ──
-                      _sectionTitle('习惯时间（可选）'),
+                      SectionTitle('习惯时间（可选）'),
                       Text(
                         '设定后，自动生成的待办将携带此时间',
                         style: TextStyle(
@@ -280,7 +282,7 @@ class _HabitCreatePageState extends State<HabitCreatePage> {
                       const SizedBox(height: 20),
 
                       // ── Action Items (habit-level) ──
-                      _sectionTitle('行动项（习惯的具体步骤）'),
+                      SectionTitle('行动项（习惯的具体步骤）'),
                       Text(
                         '把习惯拆成具体可执行的步骤',
                         style: TextStyle(
@@ -331,7 +333,7 @@ class _HabitCreatePageState extends State<HabitCreatePage> {
                       const SizedBox(height: 20),
 
                       // ── Two-min safety valve ──
-                      _sectionTitle('两分钟安全阀'),
+                      SectionTitle('两分钟安全阀'),
                       Text(
                         '如果太累不想做完整版，两分钟能做什么？',
                         style: TextStyle(
@@ -350,39 +352,10 @@ class _HabitCreatePageState extends State<HabitCreatePage> {
                     ],
                   ),
                 ),
-                _buildSaveButton(colorScheme),
+                SaveButton(label: '创建习惯', onPressed: _saving ? null : _save, isSaving: _saving),
               ],
             ),
     );
   }
 
-  Widget _sectionTitle(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        text,
-        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-      ),
-    );
-  }
-
-  Widget _buildSaveButton(ColorScheme colorScheme) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      child: FilledButton(
-        onPressed: _saving ? null : _save,
-        style: FilledButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-        ),
-        child: _saving
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Text('创建习惯', style: TextStyle(fontSize: 16)),
-      ),
-    );
-  }
 }
