@@ -9,6 +9,7 @@ import '../models/goal.dart';
 import '../models/milestone.dart';
 import '../providers/drawer.dart';
 import '../providers/goals.dart';
+import '../providers/search.dart';
 import '../components/heatmap.dart';
 import '../components/stats_row.dart';
 import '../components/day_detail_sheet.dart';
@@ -53,16 +54,6 @@ class MainPageState extends ConsumerState<MainPage> {
   bool _searching = false;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
-  String _searchQuery = '';
-  List<Goal> _allGoals = [];
-  List<Milestone> _allMilestones = [];
-  Map<int, String> _goalNames = {}; // goalId -> goal name
-  List<_SearchResult> _searchResults = [];
-  bool _searchDataLoaded = false;
-
-  // ── Search history (in-memory, max 12 items) ──
-  static const _maxHistoryItems = 12;
-  List<String> _searchHistory = [];
 
   // Expose state for CLI
   int? get activeGoalId => _activeGoalId;
@@ -95,33 +86,6 @@ class MainPageState extends ConsumerState<MainPage> {
     });
   }
 
-  Future<void> _loadSearchData() async {
-    if (_searchDataLoaded) return;
-    try {
-      final goals = await widget.goalService.getAllGoals();
-      final milestones = <Milestone>[];
-      final goalNames = <int, String>{};
-      for (final g in goals) {
-        if (g.id != null) {
-          goalNames[g.id!] = g.name;
-          final ms = await widget.goalService.getMilestonesByGoal(g.id!);
-          milestones.addAll(ms);
-        }
-      }
-      if (!mounted) return;
-      setState(() {
-        _allGoals = goals;
-        _allMilestones = milestones;
-        _goalNames = goalNames;
-        _searchDataLoaded = true;
-      });
-      _performSearch();
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _searchDataLoaded = true);
-    }
-  }
-
   void _switchGoal(int goalId) {
     setState(() => _activeGoalId = goalId);
   }
@@ -129,130 +93,40 @@ class MainPageState extends ConsumerState<MainPage> {
   // ── Search methods ──
 
   void _openSearch() {
-    setState(() {
-      _searching = true;
-      _searchQuery = '';
-      _searchResults = [];
-    });
+    setState(() => _searching = true);
     _searchController.clear();
-    _loadSearchData();
+    ref.read(searchProvider.notifier).loadData();
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) _searchFocusNode.requestFocus();
     });
   }
 
   void _closeSearch() {
-    setState(() {
-      _searching = false;
-      _searchQuery = '';
-      _searchResults = [];
-    });
+    setState(() => _searching = false);
     _searchController.clear();
     _searchFocusNode.unfocus();
+    ref.read(searchProvider.notifier).reset();
   }
 
   void _onSearchChanged() {
-    setState(() => _searchQuery = _searchController.text);
-    _performSearch();
-  }
-
-  void _performSearch() {
-    if (_searchQuery.trim().isEmpty) {
-      setState(() => _searchResults = []);
-      return;
-    }
-
-    final lowerQ = _searchQuery.toLowerCase().trim();
-    final results = <_SearchResult>[];
-
-    for (final g in _allGoals) {
-      if (g.name.toLowerCase().contains(lowerQ)) {
-        results.add(_SearchResult(
-          type: _ResultType.goal,
-          id: g.id,
-          title: g.name,
-          subtitle: _goalStatusLabel(g.status),
-        ));
-      }
-    }
-
-    for (final m in _allMilestones) {
-      if (m.name.toLowerCase().contains(lowerQ)) {
-        final parentName = _goalNames[m.goalId] ?? '';
-        results.add(_SearchResult(
-          type: _ResultType.milestone,
-          id: m.id,
-          title: m.name,
-          subtitle: parentName.isNotEmpty
-              ? '$parentName · ${_milestoneStatusLabel(m.status)}'
-              : _milestoneStatusLabel(m.status),
-        ));
-      }
-    }
-
-    setState(() => _searchResults = results);
-  }
-
-  void _addToHistory(String query) {
-    final trimmed = query.trim();
-    if (trimmed.isEmpty) return;
-    setState(() {
-      _searchHistory = [trimmed, ..._searchHistory.where((e) => e != trimmed)];
-      if (_searchHistory.length > _maxHistoryItems) {
-        _searchHistory = _searchHistory.sublist(0, _maxHistoryItems);
-      }
-    });
-  }
-
-  void _removeFromHistory(String item) {
-    setState(() {
-      _searchHistory = _searchHistory.where((e) => e != item).toList();
-    });
-  }
-
-  void _clearHistory() {
-    setState(() => _searchHistory = []);
+    ref.read(searchProvider.notifier).setQuery(_searchController.text);
   }
 
   void _selectHistoryItem(String query) {
     _searchController.text = query;
     _onSearchChanged();
-    _addToHistory(query);
+    ref.read(searchProvider.notifier).addToHistory(query);
   }
 
-  void _tapSearchResult(_SearchResult result) {
-    if (result.type == _ResultType.goal && result.id != null) {
-      _addToHistory(_searchQuery);
+  void _tapSearchResult(SearchResult result) {
+    if (result.type == SearchResultType.goal && result.id != null) {
+      ref.read(searchProvider.notifier).addToHistory(_searchController.text);
       setState(() {
         _activeGoalId = result.id;
         _searching = false;
       });
       _searchController.clear();
       _searchFocusNode.unfocus();
-    }
-  }
-
-  static String _goalStatusLabel(String status) {
-    switch (status) {
-      case 'active':
-        return '进行中';
-      case 'completed':
-        return '已完成';
-      case 'archived':
-        return '已归档';
-      default:
-        return status;
-    }
-  }
-
-  static String _milestoneStatusLabel(String status) {
-    switch (status) {
-      case 'active':
-        return '进行中';
-      case 'completed':
-        return '已完成';
-      default:
-        return '等待中';
     }
   }
 
@@ -291,12 +165,13 @@ class MainPageState extends ConsumerState<MainPage> {
       });
     });
 
+    final searchState = ref.watch(searchProvider);
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       drawer: _buildDrawer(colorScheme),
       appBar: _searching
-          ? _buildSearchAppBar(colorScheme, goals)
+          ? _buildSearchAppBar(colorScheme, goals, searchState)
           : _buildNormalAppBar(colorScheme, goals),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -309,7 +184,7 @@ class MainPageState extends ConsumerState<MainPage> {
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 200),
               child: _searching
-                  ? _buildSearchContent(colorScheme, goals)
+                  ? _buildSearchContent(colorScheme, goals, searchState)
                   : _selectedIndex == 0
                       ? GoalFacePage(
                           key: ValueKey('goal_face_$_activeGoalId'),
@@ -523,13 +398,14 @@ class MainPageState extends ConsumerState<MainPage> {
   // SEARCH APP BAR — Back arrow + Pill search bar + Cancel
   // ═══════════════════════════════════════════════════════════
 
-  PreferredSizeWidget _buildSearchAppBar(ColorScheme colorScheme, List<Goal> goals) {
+  PreferredSizeWidget _buildSearchAppBar(ColorScheme colorScheme, List<Goal> goals,
+      SearchState searchState) {
     return AppBar(
       leading: IconButton(
         icon: const Icon(Icons.arrow_back),
         onPressed: _closeSearch,
       ),
-      title: _buildSearchField(colorScheme),
+      title: _buildSearchField(colorScheme, searchState),
       actions: [
         TextButton(
           onPressed: _closeSearch,
@@ -542,7 +418,7 @@ class MainPageState extends ConsumerState<MainPage> {
     );
   }
 
-  Widget _buildSearchField(ColorScheme colorScheme) {
+  Widget _buildSearchField(ColorScheme colorScheme, SearchState searchState) {
     return Container(
       height: 40,
       decoration: BoxDecoration(
@@ -573,7 +449,7 @@ class MainPageState extends ConsumerState<MainPage> {
               ),
             ),
           ),
-          if (_searchQuery.isNotEmpty)
+          if (searchState.query.isNotEmpty)
             GestureDetector(
               onTap: () {
                 _searchController.clear();
@@ -594,12 +470,13 @@ class MainPageState extends ConsumerState<MainPage> {
   // SEARCH CONTENT — Landing (empty query) or Results (with query)
   // ═══════════════════════════════════════════════════════════
 
-  Widget _buildSearchContent(ColorScheme colorScheme, List<Goal> goals) {
-    if (_searchQuery.trim().isEmpty) {
-      return _buildSearchLanding(colorScheme, goals);
+  Widget _buildSearchContent(ColorScheme colorScheme, List<Goal> goals,
+      SearchState searchState) {
+    if (searchState.query.trim().isEmpty) {
+      return _buildSearchLanding(colorScheme, goals, searchState);
     }
 
-    if (_searchResults.isEmpty) {
+    if (searchState.results.isEmpty) {
       return Center(
         key: const ValueKey('search_empty'),
         child: Column(
@@ -608,7 +485,7 @@ class MainPageState extends ConsumerState<MainPage> {
             Icon(Icons.search_off_outlined, size: 64,
                 color: colorScheme.onSurface.withValues(alpha: 0.15)),
             const SizedBox(height: 12),
-            Text('没有找到 "$_searchQuery" 的结果',
+            Text('没有找到 "${searchState.query}" 的结果',
                 style: TextStyle(
                     color: colorScheme.onSurface.withValues(alpha: 0.4))),
           ],
@@ -619,15 +496,16 @@ class MainPageState extends ConsumerState<MainPage> {
     return ListView.separated(
       key: const ValueKey('search_results'),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      itemCount: _searchResults.length,
+      itemCount: searchState.results.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
-        return _searchResultCard(_searchResults[index], colorScheme);
+        return _searchResultCard(searchState.results[index], colorScheme);
       },
     );
   }
 
-  Widget _buildSearchLanding(ColorScheme colorScheme, List<Goal> goals) {
+  Widget _buildSearchLanding(ColorScheme colorScheme, List<Goal> goals,
+      SearchState searchState) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textMain = colorScheme.onSurface;
     final textMuted = textMain.withValues(alpha: isDark ? 0.55 : 0.6);
@@ -649,17 +527,18 @@ class MainPageState extends ConsumerState<MainPage> {
                 ),
               ),
               const Spacer(),
-              if (_searchHistory.isNotEmpty)
+              if (searchState.history.isNotEmpty)
                 IconButton(
                   visualDensity: VisualDensity.compact,
-                  onPressed: _clearHistory,
+                  onPressed: () =>
+                      ref.read(searchProvider.notifier).clearHistory(),
                   icon: Icon(Icons.delete_outline, size: 18, color: textMuted),
                   tooltip: '清空搜索历史',
                 ),
             ],
           ),
           const SizedBox(height: 8),
-          if (_searchHistory.isEmpty)
+          if (searchState.history.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(
@@ -668,7 +547,7 @@ class MainPageState extends ConsumerState<MainPage> {
               ),
             )
           else
-            ..._searchHistory.map((item) => InkWell(
+            ...searchState.history.map((item) => InkWell(
                   onTap: () => _selectHistoryItem(item),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 6),
@@ -683,7 +562,9 @@ class MainPageState extends ConsumerState<MainPage> {
                         ),
                         IconButton(
                           visualDensity: VisualDensity.compact,
-                          onPressed: () => _removeFromHistory(item),
+                          onPressed: () => ref
+                              .read(searchProvider.notifier)
+                              .removeFromHistory(item),
                           icon: Icon(Icons.close, size: 18, color: textMuted),
                         ),
                       ],
@@ -718,7 +599,7 @@ class MainPageState extends ConsumerState<MainPage> {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8)),
                   onPressed: () {
-                    _addToHistory(goal.name);
+                    ref.read(searchProvider.notifier).addToHistory(goal.name);
                     _searchController.text = goal.name;
                     _onSearchChanged();
                   },
@@ -731,8 +612,8 @@ class MainPageState extends ConsumerState<MainPage> {
     );
   }
 
-  Widget _searchResultCard(_SearchResult r, ColorScheme colorScheme) {
-    final isGoal = r.type == _ResultType.goal;
+  Widget _searchResultCard(SearchResult r, ColorScheme colorScheme) {
+    final isGoal = r.type == SearchResultType.goal;
 
     return Card(
       elevation: 0,
@@ -1017,18 +898,4 @@ class MainPageState extends ConsumerState<MainPage> {
   }
 }
 
-enum _ResultType { goal, milestone }
 
-class _SearchResult {
-  final _ResultType type;
-  final int? id;
-  final String title;
-  final String? subtitle;
-
-  _SearchResult({
-    required this.type,
-    this.id,
-    required this.title,
-    this.subtitle,
-  });
-}
