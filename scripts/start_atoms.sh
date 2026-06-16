@@ -22,7 +22,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
 export PATH="$PATH:$FLUTTER_BIN"
 export DISPLAY="$DISPLAY_TARGET"
 
-BIN="$PROJECT_DIR/build/linux/x64/debug/bundle/atoms"
+BIN="$PROJECT_DIR/build/linux/x64/debug/bundle/atoms_habits"
 DATA_DIR="$(dirname "$BIN")/data"
 FLUTTER_ASSETS="$PROJECT_DIR/build/flutter_assets"
 ICU_DAT="$PROJECT_DIR/linux/flutter/ephemeral/icudtl.dat"
@@ -58,8 +58,8 @@ else
     log_info "使用已有二进制（如需重新编译请先 flutter build linux --debug）"
 fi
 
-# ── 3. 杀掉所有旧 atoms 进程 ──────────────────────────────
-OLD_PIDS=$(pgrep -f "/atoms" 2>/dev/null || true)
+# ── 3. 杀掉所有旧 atoms_habits 进程 ──────────────────────────────
+OLD_PIDS=$(pgrep -f "/atoms_habits" 2>/dev/null || true)
 if [ -n "$OLD_PIDS" ]; then
     log_info "停止旧进程…"
     echo "$OLD_PIDS" | xargs kill 2>/dev/null || true
@@ -77,7 +77,7 @@ log_info "启动 Atoms…"
 
 cd "$(dirname "$BIN")"
 nohup env LIBGL_ALWAYS_SOFTWARE=true GALLIUM_DRIVER=llvmpipe \
-    ./atoms </dev/null &>/dev/null &
+    ./atoms_habits </dev/null &>/dev/null &
 
 ATOMS_PID=$!
 sleep 2

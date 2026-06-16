@@ -1,5 +1,5 @@
-name: atoms
-description: "A new Flutter project."
+name: atoms_habits
+description: "基于原子习惯理论的习惯追踪应用"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
