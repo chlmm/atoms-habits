@@ -75,6 +75,14 @@ class HabitService {
       sortOrder: sortOrder,
     );
     final id = await _db.insertActionPlan(ap);
+
+    // 如果该习惯今天已标记为完成，新增行动项后回退为未完成
+    final todayLog = await _db.getLogForDate(habitId, _db.today());
+    if (todayLog != null && todayLog.status == LogStatus.full) {
+      await _db.db.delete('logs',
+          where: 'id = ?', whereArgs: [todayLog.id]);
+    }
+
     return ap.copyWith(id: id);
   }
 

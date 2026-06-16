@@ -146,17 +146,22 @@ class _HabitFacePageState extends State<HabitFacePage> {
   Future<void> _completeFull(int habitId) async {
     final checked = _checkedActions[habitId] ?? {};
     final actions = _habitActions[habitId] ?? [];
-    final completions = <String, bool>{};
-    for (final a in actions) {
-      if (a.id != null) {
-        completions[a.id!.toString()] = checked.contains(a.id);
+
+    // 有行动项时必须全部打勾才能完成
+    if (actions.isNotEmpty) {
+      final allChecked = actions.every((a) => a.id != null && checked.contains(a.id));
+      if (!allChecked) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('请先完成所有行动项再点击完成')),
+        );
+        return;
       }
     }
-    // If no individual actions were checked, mark all as done
-    if (checked.isEmpty && actions.isNotEmpty) {
-      for (final a in actions) {
-        if (a.id != null) completions[a.id!.toString()] = true;
-      }
+
+    final completions = <String, bool>{};
+    for (final a in actions) {
+      if (a.id != null) completions[a.id!.toString()] = true;
     }
     try {
       await widget.habitService.completeHabit(
