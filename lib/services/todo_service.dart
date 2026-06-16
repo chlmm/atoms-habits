@@ -90,26 +90,33 @@ class TodoService {
     final existing = await _db.getLogForDate(todo.habitId!, date);
 
     if (todo.actionPlanId != null) {
-      // ── 行动项级：只操作已有 log 的 actionCompletions ──
-      // 不主动创建新 log 条目，避免错误地改变习惯面的主状态图标
-      if (existing == null) return; // 习惯面未操作 → 不同步
-
+      // ── 行动项级：共享 logs.actionCompletions ──
       final actionKey = '${todo.actionPlanId}';
-      final map = _decodeActionCompletions(existing.actionCompletions);
-      if (completed) {
-        map[actionKey] = true;
-      } else {
-        map.remove(actionKey);
+      if (existing != null) {
+        final map = _decodeActionCompletions(existing.actionCompletions);
+        if (completed) {
+          map[actionKey] = true;
+        } else {
+          map.remove(actionKey);
+        }
+        if (map.isEmpty) {
+          await _db.db.delete('logs',
+              where: 'id = ?', whereArgs: [existing.id]);
+        } else {
+          await _db.db.update('logs',
+              {'action_completions': jsonEncode(map)},
+              where: 'id = ?', whereArgs: [existing.id]);
+        }
+      } else if (completed) {
+        // 无 log → 创建 pending 记录，共享 actionCompletions
+        await _db.insertLog(LogEntry(
+          habitId: todo.habitId!,
+          date: date,
+          status: LogStatus.pending,
+          actionCompletions: jsonEncode({actionKey: true}),
+        ));
       }
-
-      if (map.isEmpty) {
-        await _db.db.delete('logs',
-            where: 'id = ?', whereArgs: [existing.id]);
-      } else {
-        await _db.db.update('logs',
-            {'action_completions': jsonEncode(map)},
-            where: 'id = ?', whereArgs: [existing.id]);
-      }
+      // cancelling with no log → nothing to do
     } else {
       // ── 习惯级：整习惯打卡/取消 ──
       if (completed) {

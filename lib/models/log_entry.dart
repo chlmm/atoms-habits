@@ -1,4 +1,4 @@
-enum LogStatus { twoMin, full, skipped }
+enum LogStatus { twoMin, full, skipped, pending }
 
 extension LogStatusExt on LogStatus {
   String get value {
@@ -9,6 +9,8 @@ extension LogStatusExt on LogStatus {
         return 'full';
       case LogStatus.skipped:
         return 'skipped';
+      case LogStatus.pending:
+        return 'pending';
     }
   }
 
@@ -18,8 +20,10 @@ extension LogStatusExt on LogStatus {
         return LogStatus.full;
       case 'skipped':
         return LogStatus.skipped;
-      default:
+      case 'two_min':
         return LogStatus.twoMin;
+      default:
+        return LogStatus.pending;
     }
   }
 }
