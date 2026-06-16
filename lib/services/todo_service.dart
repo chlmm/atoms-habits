@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../modules/database.dart';
 import '../models/todo.dart';
 import '../models/habit.dart';
@@ -89,35 +90,37 @@ class TodoService {
     final existing = await _db.getLogForDate(todo.habitId!, date);
 
     if (todo.actionPlanId != null) {
-      // ── 行动项级：独立管理，不影响其他行动项 ──
-      await _db.updateTodo(todo.copyWith(isCompleted: completed));
+      // ── 行动项级：通过 Map 格式管理（与习惯面一致）──
+      final actionKey = '${todo.actionPlanId}';
       if (completed) {
-        // 将该 action 加入 log 的 actionCompletions
-        final actionIdStr = '"${todo.actionPlanId}"';
+        // 将该 action 加入 log（Map 格式：{"1": true}）
         if (existing == null) {
           await _db.insertLog(LogEntry(
             habitId: todo.habitId!,
             date: date,
             status: LogStatus.twoMin,
-            actionCompletions: '[$actionIdStr]',
+            actionCompletions: jsonEncode({actionKey: true}),
           ));
         } else {
-          final current = existing.actionCompletions ?? '[]';
-          final updated = current.replaceFirst(']', ', $actionIdStr]');
-          await _db.db.update('logs', {'action_completions': updated},
+          final map = _decodeActionCompletions(existing.actionCompletions);
+          map[actionKey] = true;
+          await _db.db.update('logs',
+              {'action_completions': jsonEncode(map)},
               where: 'id = ?', whereArgs: [existing.id]);
         }
       } else {
-        // 从 actionCompletions 中移除该 action
+        // 从 Map 中移除该 action
         if (existing != null) {
-          final current = existing.actionCompletions ?? '[]';
-          final actionIdStr = '"${todo.actionPlanId}"';
-          final cleaned = current.replaceAll(actionIdStr, '')
-              .replaceAll(', ', ',')
-              .replaceAll('[,', '[')
-              .replaceAll(',]', ']');
-          await _db.db.update('logs', {'action_completions': cleaned},
-              where: 'id = ?', whereArgs: [existing.id]);
+          final map = _decodeActionCompletions(existing.actionCompletions);
+          map.remove(actionKey);
+          if (map.isEmpty) {
+            await _db.db.delete('logs',
+                where: 'id = ?', whereArgs: [existing.id]);
+          } else {
+            await _db.db.update('logs',
+                {'action_completions': jsonEncode(map)},
+                where: 'id = ?', whereArgs: [existing.id]);
+          }
         }
       }
     } else {
@@ -243,6 +246,19 @@ class TodoService {
           ));
         }
       }
+    }
+  }
+
+  /// 解析 actionCompletions JSON 为 Map（格式：{"actionPlanId": true, ...}）
+  static Map<String, bool> _decodeActionCompletions(String? json) {
+    if (json == null || json.isEmpty || json == '[]') return {};
+    try {
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
+      final result = <String, bool>{};
+      decoded.forEach((k, v) => result[k] = v == true);
+      return result;
+    } catch (_) {
+      return {};
     }
   }
 }
