@@ -8,6 +8,7 @@ import 'services/habit_service.dart';
 import 'services/review_service.dart';
 import 'services/todo_service.dart';
 import 'services/frequency_service.dart';
+import 'providers/services.dart';
 import 'modules/cli.dart';
 import 'pages/main_page.dart';
 import 'app.dart';
@@ -46,6 +47,12 @@ void main(List<String> args) async {
 
   runApp(
     ProviderScope(
+      overrides: [
+        goalServiceProvider.overrideWithValue(goalService),
+        habitServiceProvider.overrideWithValue(habitService),
+        reviewServiceProvider.overrideWithValue(reviewService),
+        todoServiceProvider.overrideWithValue(todoService),
+      ],
       child: AtomsApp(
         goalService: goalService,
         habitService: habitService,

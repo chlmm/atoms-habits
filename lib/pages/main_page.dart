@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/goal_service.dart';
 import '../services/habit_service.dart';
 import '../services/review_service.dart';
@@ -6,6 +7,7 @@ import '../services/todo_service.dart';
 import '../services/frequency_service.dart';
 import '../models/goal.dart';
 import '../models/milestone.dart';
+import '../providers/drawer.dart';
 import '../components/heatmap.dart';
 import '../components/stats_row.dart';
 import '../components/day_detail_sheet.dart';
@@ -18,7 +20,7 @@ import 'todo_face_page.dart';
 /// 左上角 ☰ 汉堡菜单 → Drawer 抽屉（目标/习惯/设置）
 /// 底部中央大 ➕ 按钮（添加习惯或目标）
 /// 搜索：全屏内联模式（MemoFlow Android 风格）
-class MainPage extends StatefulWidget {
+class MainPage extends ConsumerStatefulWidget {
   final GoalService goalService;
   final HabitService habitService;
   final ReviewService reviewService;
@@ -33,26 +35,19 @@ class MainPage extends StatefulWidget {
   });
 
   @override
-  State<MainPage> createState() => MainPageState();
+  ConsumerState<MainPage> createState() => MainPageState();
 }
 
-class MainPageState extends State<MainPage> {
+class MainPageState extends ConsumerState<MainPage> {
   final FrequencyService _frequencyService = FrequencyService();
 
   // ── Navigation state ──
-  int _selectedIndex = 1; // 0=goal, 1=habit, 2=todo (default to habit face)
+  int _selectedIndex = 1;
   int? _activeGoalId;
   int _habitFaceRefreshKey = 0;
   int _todoFaceRefreshKey = 0;
   List<Goal> _goals = [];
   String _sortBy = 'created_desc';
-
-  // ── Drawer stats / heatmap data (loaded from services) ──
-  int _habitCount = 0;
-  int _goalCount = 0;
-  int _activeDays = 0;
-  Map<String, int> _dailyCounts = {};
-  bool _drawerDataLoaded = false;
 
   // ── Search state (full-screen inline, MemoFlow Android style) ──
   bool _searching = false;
@@ -78,7 +73,6 @@ class MainPageState extends State<MainPage> {
   void initState() {
     super.initState();
     _loadGoals();
-    _loadDrawerData();
   }
 
   @override
@@ -95,7 +89,7 @@ class MainPageState extends State<MainPage> {
   Future<void> _navigateAndRefresh(String route, {Object? arguments}) async {
     await Navigator.pushNamed(context, route, arguments: arguments);
     _loadGoals();
-    _loadDrawerData();
+    ref.invalidate(drawerDataProvider);
     setState(() {
       _habitFaceRefreshKey++;
       _todoFaceRefreshKey++;
@@ -114,41 +108,6 @@ class MainPageState extends State<MainPage> {
         _activeGoalId = goals.isNotEmpty ? goals.first.id : null;
       }
     });
-  }
-
-  /// 加载 Drawer 所需的真实统计数据
-  Future<void> _loadDrawerData() async {
-    try {
-      final now = DateTime.now();
-      final todayStr =
-          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      // 热力图覆盖 ~18周 ≈ 126 天前
-      final startDate = now.subtract(const Duration(days: 130));
-      final startStr =
-          '${startDate.year}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}';
-
-      // 并行加载三个数据源
-      final results = await Future.wait([
-        widget.habitService.getActiveHabitCount(),
-        widget.goalService.getAllGoals(), // for goal count
-        widget.habitService.getDailyCheckinCounts(
-            startDate: startStr, endDate: todayStr),
-        widget.habitService.getActiveDaysCount(
-            startDate: startStr, endDate: todayStr),
-      ]);
-
-      if (!mounted) return;
-      setState(() {
-        _habitCount = results[0] as int;
-        _goalCount = (results[1] as List).length;
-        _dailyCounts = results[2] as Map<String, int>;
-        _activeDays = results[3] as int;
-        _drawerDataLoaded = true;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _drawerDataLoaded = true);
-    }
   }
 
   Future<void> _loadSearchData() async {
@@ -424,29 +383,30 @@ class MainPageState extends State<MainPage> {
               ),
             ),
 
-            // ── Stats row: real data from HabitService / GoalService ──
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-              child: _drawerDataLoaded
-                  ? StatsRow(
+            // ── Stats row + Heatmap: 由 drawerDataProvider 驱动 ──
+            ref.watch(drawerDataProvider).when(
+              data: (d) => Column(
+                children: [
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    child: StatsRow(
                       items: [
-                        StatItem(value: '$_habitCount', label: '习惯'),
-                        StatItem(value: '$_goalCount', label: '目标'),
-                        StatItem(value: '$_activeDays', label: '天'),
+                        StatItem(
+                            value: '${d.habitCount}', label: '习惯'),
+                        StatItem(
+                            value: '${d.goalCount}', label: '目标'),
+                        StatItem(
+                            value: '${d.activeDays}', label: '天'),
                       ],
-                    )
-                  : _loadingPlaceholder(colorScheme),
-            ),
-
-            // ── Heatmap: real data from logs table ──
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: _drawerDataLoaded
-                  ? Heatmap(
-                      dailyCounts: _dailyCounts,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    child: Heatmap(
+                      dailyCounts: d.dailyCounts,
                       colorScheme: colorScheme,
                       onDayTap: (date, count) {
-                        // 先关闭 Drawer，等一帧再弹 BottomSheet（避免动画冲突/context 失效）
                         Navigator.pop(context);
                         WidgetsBinding.instance.addPostFrameCallback((_) {
                           if (!mounted) return;
@@ -457,8 +417,12 @@ class MainPageState extends State<MainPage> {
                           );
                         });
                       },
-                    )
-                  : const SizedBox(height: 84),
+                    ),
+                  ),
+                ],
+              ),
+              loading: () => _loadingPlaceholder(colorScheme),
+              error: (_, __) => const SizedBox(height: 16),
             ),
 
             const Divider(height: 1),
