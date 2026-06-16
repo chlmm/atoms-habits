@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cli_bridge/cli_bridge.dart';
 
-import 'db/database.dart';
+import 'modules/database.dart';
 import 'services/goal_service.dart';
 import 'services/habit_service.dart';
 import 'services/review_service.dart';
 import 'services/todo_service.dart';
 import 'services/frequency_service.dart';
-import 'cli_setup.dart';
+import 'modules/cli.dart';
 import 'pages/main_page.dart';
 import 'app.dart';
 

@@ -3,15 +3,15 @@ import 'dart:io';
 import 'package:cli_bridge/cli_bridge.dart';
 import 'package:flutter/material.dart';
 
-import 'db/database.dart';
-import 'services/goal_service.dart';
-import 'services/habit_service.dart';
-import 'services/review_service.dart';
-import 'services/todo_service.dart';
-import 'services/identity_service.dart';
-import 'data/demo_data.dart';
-import 'models/identity_insight.dart';
-import 'pages/main_page.dart';
+import 'database.dart';
+import '../services/goal_service.dart';
+import '../services/habit_service.dart';
+import '../services/review_service.dart';
+import '../services/todo_service.dart';
+import '../services/identity_service.dart';
+import '../data/demo_data.dart';
+import '../models/identity_insight.dart';
+import '../pages/main_page.dart';
 
 /// 向 CliBridge 注册 Atoms 项目的全部 CLI 命令。
 void setupCliBridge(

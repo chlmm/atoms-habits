@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../db/database.dart';
+import '../modules/database.dart';
 import 'goal_service.dart';
 import 'habit_service.dart';
 import 'review_service.dart';

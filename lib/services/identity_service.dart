@@ -1,4 +1,4 @@
-import '../db/database.dart';
+import '../modules/database.dart';
 import '../models/identity_insight.dart';
 
 class IdentityService {
