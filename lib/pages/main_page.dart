@@ -8,6 +8,7 @@ import '../services/frequency_service.dart';
 import '../models/goal.dart';
 import '../models/milestone.dart';
 import '../providers/drawer.dart';
+import '../providers/goals.dart';
 import '../components/heatmap.dart';
 import '../components/stats_row.dart';
 import '../components/day_detail_sheet.dart';
@@ -46,7 +47,6 @@ class MainPageState extends ConsumerState<MainPage> {
   int? _activeGoalId;
   int _habitFaceRefreshKey = 0;
   int _todoFaceRefreshKey = 0;
-  List<Goal> _goals = [];
   String _sortBy = 'created_desc';
 
   // ── Search state (full-screen inline, MemoFlow Android style) ──
@@ -72,7 +72,6 @@ class MainPageState extends ConsumerState<MainPage> {
   @override
   void initState() {
     super.initState();
-    _loadGoals();
   }
 
   @override
@@ -88,25 +87,11 @@ class MainPageState extends ConsumerState<MainPage> {
 
   Future<void> _navigateAndRefresh(String route, {Object? arguments}) async {
     await Navigator.pushNamed(context, route, arguments: arguments);
-    _loadGoals();
+    ref.invalidate(activeGoalsProvider);
     ref.invalidate(drawerDataProvider);
     setState(() {
       _habitFaceRefreshKey++;
       _todoFaceRefreshKey++;
-    });
-  }
-
-  Future<void> _loadGoals() async {
-    final goals = await widget.goalService.getActiveGoals();
-    if (!mounted) return;
-    setState(() {
-      _goals = goals;
-      if (_activeGoalId == null && goals.isNotEmpty) {
-        _activeGoalId = goals.first.id;
-      } else if (_activeGoalId != null &&
-          !goals.any((g) => g.id == _activeGoalId)) {
-        _activeGoalId = goals.isNotEmpty ? goals.first.id : null;
-      }
     });
   }
 
@@ -283,7 +268,7 @@ class MainPageState extends ConsumerState<MainPage> {
   }
 
   void cliNavigate(String route) {
-    Navigator.pushNamed(context, route).then((_) => _loadGoals());
+    Navigator.pushNamed(context, route).then((_) => ref.invalidate(activeGoalsProvider));
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -292,13 +277,27 @@ class MainPageState extends ConsumerState<MainPage> {
 
   @override
   Widget build(BuildContext context) {
+    final goals = ref.watch(activeGoalsProvider).asData?.value ?? [];
+    // Auto-select active goal when list changes
+    ref.listen(activeGoalsProvider, (prev, next) {
+      final gs = next.asData?.value ?? [];
+      setState(() {
+        if (_activeGoalId == null && gs.isNotEmpty) {
+          _activeGoalId = gs.first.id;
+        } else if (_activeGoalId != null &&
+            !gs.any((g) => g.id == _activeGoalId)) {
+          _activeGoalId = gs.isNotEmpty ? gs.first.id : null;
+        }
+      });
+    });
+
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       drawer: _buildDrawer(colorScheme),
       appBar: _searching
-          ? _buildSearchAppBar(colorScheme)
-          : _buildNormalAppBar(colorScheme),
+          ? _buildSearchAppBar(colorScheme, goals)
+          : _buildNormalAppBar(colorScheme, goals),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -310,7 +309,7 @@ class MainPageState extends ConsumerState<MainPage> {
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 200),
               child: _searching
-                  ? _buildSearchContent(colorScheme)
+                  ? _buildSearchContent(colorScheme, goals)
                   : _selectedIndex == 0
                       ? GoalFacePage(
                           key: ValueKey('goal_face_$_activeGoalId'),
@@ -499,7 +498,7 @@ class MainPageState extends ConsumerState<MainPage> {
   // NORMAL APP BAR — Hamburger + Title + Sort + Search
   // ═══════════════════════════════════════════════════════════
 
-  PreferredSizeWidget _buildNormalAppBar(ColorScheme colorScheme) {
+  PreferredSizeWidget _buildNormalAppBar(ColorScheme colorScheme, List<Goal> goals) {
     return AppBar(
       leading: Builder(
         builder: (context) => IconButton(
@@ -508,7 +507,7 @@ class MainPageState extends ConsumerState<MainPage> {
           onPressed: () => Scaffold.of(context).openDrawer(),
         ),
       ),
-      title: _buildGoalSelector(colorScheme),
+      title: _buildGoalSelector(colorScheme, goals),
       actions: [
         _buildSortMenu(colorScheme),
         IconButton(
@@ -524,7 +523,7 @@ class MainPageState extends ConsumerState<MainPage> {
   // SEARCH APP BAR — Back arrow + Pill search bar + Cancel
   // ═══════════════════════════════════════════════════════════
 
-  PreferredSizeWidget _buildSearchAppBar(ColorScheme colorScheme) {
+  PreferredSizeWidget _buildSearchAppBar(ColorScheme colorScheme, List<Goal> goals) {
     return AppBar(
       leading: IconButton(
         icon: const Icon(Icons.arrow_back),
@@ -595,9 +594,9 @@ class MainPageState extends ConsumerState<MainPage> {
   // SEARCH CONTENT — Landing (empty query) or Results (with query)
   // ═══════════════════════════════════════════════════════════
 
-  Widget _buildSearchContent(ColorScheme colorScheme) {
+  Widget _buildSearchContent(ColorScheme colorScheme, List<Goal> goals) {
     if (_searchQuery.trim().isEmpty) {
-      return _buildSearchLanding(colorScheme);
+      return _buildSearchLanding(colorScheme, goals);
     }
 
     if (_searchResults.isEmpty) {
@@ -628,7 +627,7 @@ class MainPageState extends ConsumerState<MainPage> {
     );
   }
 
-  Widget _buildSearchLanding(ColorScheme colorScheme) {
+  Widget _buildSearchLanding(ColorScheme colorScheme, List<Goal> goals) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textMain = colorScheme.onSurface;
     final textMuted = textMain.withValues(alpha: isDark ? 0.55 : 0.6);
@@ -695,7 +694,7 @@ class MainPageState extends ConsumerState<MainPage> {
           const SizedBox(height: 18),
 
           // Suggested goals
-          if (_goals.isNotEmpty) ...[
+          if (goals.isNotEmpty) ...[
             Text(
               '推荐目标',
               style: TextStyle(
@@ -708,7 +707,7 @@ class MainPageState extends ConsumerState<MainPage> {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: _goals.take(6).map((goal) {
+              children: goals.take(6).map((goal) {
                 return ActionChip(
                   avatar: Icon(Icons.flag_outlined, size: 16,
                       color: colorScheme.primary),
@@ -901,13 +900,13 @@ class MainPageState extends ConsumerState<MainPage> {
   // GOAL SELECTOR
   // ═══════════════════════════════════════════════════════════
 
-  Widget _buildGoalSelector(ColorScheme colorScheme) {
-    if (_goals.isEmpty) {
+  Widget _buildGoalSelector(ColorScheme colorScheme, List<Goal> goals) {
+    if (goals.isEmpty) {
       return const Text('Atoms');
     }
 
-    if (_goals.length == 1) {
-      final goal = _goals.first;
+    if (goals.length == 1) {
+      final goal = goals.first;
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -925,7 +924,7 @@ class MainPageState extends ConsumerState<MainPage> {
     }
 
     final activeGoal =
-        _goals.firstWhere((g) => g.id == _activeGoalId, orElse: () => _goals.first);
+        goals.firstWhere((g) => g.id == _activeGoalId, orElse: () => goals.first);
 
     return PopupMenuButton<int>(
       onSelected: _switchGoal,
@@ -945,7 +944,7 @@ class MainPageState extends ConsumerState<MainPage> {
           Icon(Icons.arrow_drop_down, color: colorScheme.onSurface),
         ],
       ),
-      itemBuilder: (ctx) => _goals
+      itemBuilder: (ctx) => goals
           .map((g) => PopupMenuItem<int>(
                 value: g.id,
                 child: Row(
