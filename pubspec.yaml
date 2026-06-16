@@ -38,6 +38,8 @@ dependencies:
   intl: ^0.20.2
   fl_chart: ^0.70.2
   flutter_riverpod: ^2.6.1
+  cli_bridge:
+    path: /workspace/dart-modules/cli_bridge
 
 dev_dependencies:
   flutter_test:

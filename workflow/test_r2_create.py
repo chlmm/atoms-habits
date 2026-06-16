@@ -14,6 +14,7 @@ REPORT_DIR = os.path.join(os.path.dirname(__file__), "reports")
 
 def test_r2_create():
     c = AtomsClient()
+    c.reset_db()  # 从干净状态开始
     report = TestReport("R2-A 用户自建流程",
                         flow_desc="用户首次进入应用，手动创建目标→里程碑→行动计划→习惯，每步创建后通过查询接口验证操作是否生效")
     fx = _load_fixture_json()

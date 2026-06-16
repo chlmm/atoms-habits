@@ -13,6 +13,7 @@ REPORT_DIR = os.path.join(os.path.dirname(__file__), "reports")
 
 def test_r2_demo():
     c = AtomsClient()
+    c.reset_db()  # 从干净状态开始
     report = TestReport("R2-B 引导模式",
                         flow_desc="用户选择引导模式，应用插入预设数据后，用户逐页查看目标→里程碑→行动计划→习惯，每页数据与预期一致才进入下一页")
     fx = _load_fixture_json()
