@@ -8,9 +8,13 @@
 
 ## 截图
 
-| 主界面 | 抽屉热力图 | Todo 面 |
-|--------|-----------|---------|
-| — | — | — |
+| 目标详情 | 习惯面 | Todo 面 |
+|--------|--------|---------|
+| ![目标详情](screenshots/goal-detail.png) | ![习惯面](screenshots/habit-face.png) | ![Todo面](screenshots/todo-face.png) |
+
+| 抽屉菜单 | 每周回顾 |
+|--------|--------|
+| ![抽屉菜单](screenshots/drawer-menu.png) | ![每周回顾](screenshots/weekly-review.png) |
 
 ## 功能
 
