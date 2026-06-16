@@ -22,7 +22,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
 export PATH="$PATH:$FLUTTER_BIN"
 export DISPLAY="$DISPLAY_TARGET"
 
-BIN="$PROJECT_DIR/build/linux/x64/debug/intermediates_do_not_run/atoms"
+BIN="$PROJECT_DIR/build/linux/x64/debug/bundle/atoms"
 DATA_DIR="$(dirname "$BIN")/data"
 FLUTTER_ASSETS="$PROJECT_DIR/build/flutter_assets"
 ICU_DAT="$PROJECT_DIR/linux/flutter/ephemeral/icudtl.dat"
