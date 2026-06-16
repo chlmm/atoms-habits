@@ -103,8 +103,14 @@ class TodoService {
           await _db.db.delete('logs',
               where: 'id = ?', whereArgs: [existing.id]);
         } else {
-          await _db.db.update('logs',
-              {'action_completions': jsonEncode(map)},
+          // 取消行动项时，如果原状态为 full → 降级为 pending
+          final fields = <String, dynamic>{
+            'action_completions': jsonEncode(map),
+          };
+          if (!completed && existing.status == LogStatus.full) {
+            fields['status'] = LogStatus.pending.value;
+          }
+          await _db.db.update('logs', fields,
               where: 'id = ?', whereArgs: [existing.id]);
         }
       } else if (completed) {
