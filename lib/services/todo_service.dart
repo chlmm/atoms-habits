@@ -90,38 +90,25 @@ class TodoService {
     final existing = await _db.getLogForDate(todo.habitId!, date);
 
     if (todo.actionPlanId != null) {
-      // ── 行动项级：通过 Map 格式管理（与习惯面一致）──
+      // ── 行动项级：只操作已有 log 的 actionCompletions ──
+      // 不主动创建新 log 条目，避免错误地改变习惯面的主状态图标
+      if (existing == null) return; // 习惯面未操作 → 不同步
+
       final actionKey = '${todo.actionPlanId}';
+      final map = _decodeActionCompletions(existing.actionCompletions);
       if (completed) {
-        // 将该 action 加入 log（Map 格式：{"1": true}）
-        if (existing == null) {
-          await _db.insertLog(LogEntry(
-            habitId: todo.habitId!,
-            date: date,
-            status: LogStatus.twoMin,
-            actionCompletions: jsonEncode({actionKey: true}),
-          ));
-        } else {
-          final map = _decodeActionCompletions(existing.actionCompletions);
-          map[actionKey] = true;
-          await _db.db.update('logs',
-              {'action_completions': jsonEncode(map)},
-              where: 'id = ?', whereArgs: [existing.id]);
-        }
+        map[actionKey] = true;
       } else {
-        // 从 Map 中移除该 action
-        if (existing != null) {
-          final map = _decodeActionCompletions(existing.actionCompletions);
-          map.remove(actionKey);
-          if (map.isEmpty) {
-            await _db.db.delete('logs',
-                where: 'id = ?', whereArgs: [existing.id]);
-          } else {
-            await _db.db.update('logs',
-                {'action_completions': jsonEncode(map)},
-                where: 'id = ?', whereArgs: [existing.id]);
-          }
-        }
+        map.remove(actionKey);
+      }
+
+      if (map.isEmpty) {
+        await _db.db.delete('logs',
+            where: 'id = ?', whereArgs: [existing.id]);
+      } else {
+        await _db.db.update('logs',
+            {'action_completions': jsonEncode(map)},
+            where: 'id = ?', whereArgs: [existing.id]);
       }
     } else {
       // ── 习惯级：整习惯打卡/取消 ──
