@@ -8,13 +8,17 @@
 
 ## 截图
 
-| 目标详情 | 习惯面 | Todo 面 |
-|--------|--------|---------|
-| ![目标详情](screenshots/goal-detail.png) | ![习惯面](screenshots/habit-face.png) | ![Todo面](screenshots/todo-face.png) |
+| 目标详情 | 习惯面 |
+|:--------:|--------|
+| ![目标详情](screenshots/goal-detail.png) | ![习惯面](screenshots/habit-face.png) |
 
-| 抽屉菜单 | 每周回顾 |
+| Todo 面 | 每周回顾 |
 |--------|--------|
-| ![抽屉菜单](screenshots/drawer-menu.png) | ![每周回顾](screenshots/weekly-review.png) |
+| ![Todo面](screenshots/todo-face.png) | ![每周回顾](screenshots/weekly-review.png) |
+
+| 抽屉菜单 | 统计页（开发中） |
+|:--------:|:-------:|
+| ![抽屉菜单](screenshots/drawer-menu.png) |<img width=550/>  |
 
 ## 功能
 
