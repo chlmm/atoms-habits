@@ -40,6 +40,8 @@ dependencies:
   flutter_riverpod: ^2.6.1
   cli_bridge:
     path: /workspace/dart-modules/cli_bridge
+  sqlite_migrator:
+    path: /workspace/dart-modules/sqlite_migrator
 
 dev_dependencies:
   flutter_test:

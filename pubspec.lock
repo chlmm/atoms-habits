@@ -351,6 +351,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.3.3"
+  sqlite_migrator:
+    dependency: "direct main"
+    description:
+      path: "/workspace/dart-modules/sqlite_migrator"
+      relative: false
+    source: path
+    version: "0.1.0"
   stack_trace:
     dependency: transitive
     description:
