@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/goal_service.dart';
 import '../services/habit_service.dart';
 import '../services/review_service.dart';
@@ -7,10 +8,11 @@ import '../models/habit.dart';
 import '../models/milestone.dart';
 import '../models/review.dart';
 import '../models/log_entry.dart';
+import '../providers/goals.dart';
 import '../components/habit_grid.dart';
 import '../components/save_button.dart';
 
-class ReviewPage extends StatefulWidget {
+class ReviewPage extends ConsumerStatefulWidget {
   final GoalService goalService;
   final HabitService habitService;
   final ReviewService reviewService;
@@ -23,11 +25,10 @@ class ReviewPage extends StatefulWidget {
   });
 
   @override
-  State<ReviewPage> createState() => _ReviewPageState();
+  ConsumerState<ReviewPage> createState() => _ReviewPageState();
 }
 
-class _ReviewPageState extends State<ReviewPage> {
-  List<Goal> _goals = [];
+class _ReviewPageState extends ConsumerState<ReviewPage> {
   int? _selectedGoalId;
   List<Milestone> _milestones = [];
   Map<int, List<Habit>> _milestoneHabits = {};
@@ -73,7 +74,7 @@ class _ReviewPageState extends State<ReviewPage> {
       return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
     });
 
-    final goals = await widget.goalService.getActiveGoals();
+    final goals = ref.read(activeGoalsProvider).asData?.value ?? [];
 
     int? goalId;
     if (_selectedGoalId != null && goals.any((g) => g.id == _selectedGoalId)) {
@@ -118,7 +119,6 @@ class _ReviewPageState extends State<ReviewPage> {
       _weekKey = wk;
       _weekLabel = label;
       _dates = dates;
-      _goals = goals;
       _selectedGoalId = goalId;
       _milestones = milestones;
       _milestoneHabits = milestoneHabits;
@@ -176,6 +176,7 @@ class _ReviewPageState extends State<ReviewPage> {
 
   @override
   Widget build(BuildContext context) {
+    final goals = ref.watch(activeGoalsProvider).asData?.value ?? [];
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -192,7 +193,7 @@ class _ReviewPageState extends State<ReviewPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildGoalSelector(colorScheme),
+                    _buildGoalSelector(colorScheme, goals),
                     const SizedBox(height: 16),
                     _buildWeekHeader(colorScheme),
                     const SizedBox(height: 24),
@@ -224,23 +225,23 @@ class _ReviewPageState extends State<ReviewPage> {
     );
   }
 
-  Widget _buildGoalSelector(ColorScheme colorScheme) {
-    if (_goals.length <= 1) {
-      if (_goals.isEmpty) {
+  Widget _buildGoalSelector(ColorScheme colorScheme, List<Goal> goals) {
+    if (goals.length <= 1) {
+      if (goals.isEmpty) {
         return Text('暂无目标',
             style: TextStyle(color: colorScheme.onSurface.withAlpha(128)));
       }
       return Row(children: [
         Icon(Icons.flag_outlined, size: 18, color: colorScheme.primary),
         const SizedBox(width: 8),
-        Text(_goals.first.name,
+        Text(goals.first.name,
             style: const TextStyle(fontWeight: FontWeight.w600)),
       ]);
     }
     return DropdownButton<int>(
       value: _selectedGoalId,
       isExpanded: true,
-      items: _goals
+      items: goals
           .map((g) => DropdownMenuItem(value: g.id, child: Text(g.name)))
           .toList(),
       onChanged: (id) {
